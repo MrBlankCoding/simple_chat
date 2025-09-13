@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/friend_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../widgets/friend/friend_requests_tab.dart';
 import 'search_users_screen.dart';
@@ -18,14 +19,18 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FriendProvider>(
-      builder: (context, friendProvider, child) {
+    return Consumer2<FriendProvider, ThemeProvider>(
+      builder: (context, friendProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         return CupertinoPageScaffold(
-          backgroundColor: AppConstants.backgroundColor,
+          backgroundColor: theme.backgroundColor,
           navigationBar: CupertinoNavigationBar(
-            backgroundColor: AppConstants.backgroundColor,
+            backgroundColor: theme.backgroundColor,
             border: null,
-            middle: const Text(AppStrings.friends),
+            middle: Text(
+              AppStrings.friends,
+              style: TextStyle(color: theme.textPrimary),
+            ),
             trailing: CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () {
@@ -36,9 +41,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   ),
                 );
               },
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.add,
                 size: 24,
+                color: theme.primaryColor,
               ),
             ),
           ),
@@ -62,8 +68,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
                                 horizontal: 6,
                                 vertical: 2,
                               ),
-                              decoration: const BoxDecoration(
-                                color: AppConstants.errorColor,
+                              decoration: BoxDecoration(
+                                color: theme.errorColor,
                                 shape: BoxShape.circle,
                               ),
                               child: Text(

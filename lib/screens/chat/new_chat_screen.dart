@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../providers/friend_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../themes/app_theme.dart';
 import '../../models/user_model.dart';
 import '../../utils/constants.dart';
 import '../../widgets/common/loading_overlay.dart';
@@ -63,21 +65,22 @@ class _NewChatScreenState extends State<NewChatScreen> {
       final chatId = await chatProvider.getOrCreateDirectChat(friend.uid);
 
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(
+        Navigator.of(context, rootNavigator: true).pushReplacementNamed(
           '/chat',
           arguments: {'chatId': chatId},
         );
       }
     } catch (e) {
       if (mounted) {
+        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
-            title: const Text('Error'),
-            content: const Text('Failed to start chat. Please try again.'),
+            title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+            content: Text('Failed to start chat. Please try again.', style: TextStyle(color: theme.textSecondary)),
             actions: [
               CupertinoDialogAction(
-                child: const Text('OK'),
+                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -89,22 +92,26 @@ class _NewChatScreenState extends State<NewChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FriendProvider>(
-      builder: (context, friendProvider, child) {
+    return Consumer2<FriendProvider, ThemeProvider>(
+      builder: (context, friendProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         final friends = _isSearching ? _filteredFriends : friendProvider.getFriendsList();
 
         return LoadingOverlay(
           isLoading: friendProvider.isLoading,
           child: CupertinoPageScaffold(
-            backgroundColor: AppConstants.backgroundColor,
+            backgroundColor: theme.backgroundColor,
             navigationBar: CupertinoNavigationBar(
-              backgroundColor: AppConstants.backgroundColor,
+              backgroundColor: theme.backgroundColor,
               border: null,
-              middle: const Text('New Chat'),
+              middle: Text(
+                'New Chat',
+                style: TextStyle(color: theme.textPrimary),
+              ),
               leading: CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Icon(CupertinoIcons.back),
+                child: Icon(CupertinoIcons.back, color: theme.primaryColor),
               ),
             ),
             child: SafeArea(
@@ -114,17 +121,23 @@ class _NewChatScreenState extends State<NewChatScreen> {
                   Container(
                     margin: const EdgeInsets.all(AppConstants.paddingMedium),
                     decoration: BoxDecoration(
-                      color: AppConstants.surfaceColor,
+                      color: theme.cardColor,
                       borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                     ),
                     child: CupertinoTextField(
                       controller: _searchController,
                       placeholder: 'Search friends...',
-                      prefix: const Padding(
-                        padding: EdgeInsets.only(left: AppConstants.paddingMedium),
+                      style: TextStyle(color: theme.textPrimary),
+                      placeholderStyle: TextStyle(color: theme.textSecondary),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+                      ),
+                      prefix: Padding(
+                        padding: const EdgeInsets.only(left: AppConstants.paddingMedium),
                         child: Icon(
                           CupertinoIcons.search,
-                          color: CupertinoColors.secondaryLabel,
+                          color: theme.textSecondary,
                         ),
                       ),
                       suffix: _searchController.text.isNotEmpty
@@ -134,14 +147,13 @@ class _NewChatScreenState extends State<NewChatScreen> {
                                 _searchController.clear();
                                 _filterFriends('');
                               },
-                              child: const Icon(
+                              child: Icon(
                                 CupertinoIcons.clear_circled_solid,
-                                color: CupertinoColors.secondaryLabel,
+                                color: theme.textSecondary,
                               ),
                             )
                           : null,
                       onChanged: _filterFriends,
-                      decoration: const BoxDecoration(),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppConstants.paddingMedium,
                         vertical: AppConstants.paddingMedium,
@@ -152,12 +164,12 @@ class _NewChatScreenState extends State<NewChatScreen> {
                   // Friends List
                   Expanded(
                     child: friends.isEmpty
-                        ? _buildEmptyState()
+                        ? _buildEmptyState(theme)
                         : ListView.builder(
                             itemCount: friends.length,
                             itemBuilder: (context, index) {
                               final friend = friends[index];
-                              return _buildFriendTile(friend);
+                              return _buildFriendTile(friend, theme);
                             },
                           ),
                   ),
@@ -170,14 +182,14 @@ class _NewChatScreenState extends State<NewChatScreen> {
     );
   }
 
-  Widget _buildFriendTile(UserModel friend) {
+  Widget _buildFriendTile(UserModel friend, AppThemeData theme) {
     return Container(
       margin: const EdgeInsets.symmetric(
         horizontal: AppConstants.paddingMedium,
         vertical: AppConstants.paddingSmall,
       ),
       decoration: BoxDecoration(
-        color: AppConstants.surfaceColor,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
       ),
       child: CupertinoButton(
@@ -191,7 +203,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
               height: 50,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppConstants.primaryColor.withOpacity(0.1),
+                color: theme.primaryColor.withOpacity(0.1),
               ),
               child: friend.profileImageUrl != null
                   ? ClipOval(
@@ -199,16 +211,16 @@ class _NewChatScreenState extends State<NewChatScreen> {
                         friend.profileImageUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          return Icon(
                             CupertinoIcons.person_fill,
-                            color: AppConstants.primaryColor,
+                            color: theme.primaryColor,
                           );
                         },
                       ),
                     )
-                  : const Icon(
+                  : Icon(
                       CupertinoIcons.person_fill,
-                      color: AppConstants.primaryColor,
+                      color: theme.primaryColor,
                     ),
             ),
             
@@ -222,7 +234,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                   Text(
                     friend.name,
                     style: AppConstants.bodyLarge.copyWith(
-                      color: CupertinoColors.label,
+                      color: theme.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -230,7 +242,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                   Text(
                     friend.email,
                     style: AppConstants.bodyMedium.copyWith(
-                      color: CupertinoColors.secondaryLabel,
+                      color: theme.textSecondary,
                     ),
                   ),
                 ],
@@ -238,9 +250,9 @@ class _NewChatScreenState extends State<NewChatScreen> {
             ),
             
             // Chat Icon
-            const Icon(
+            Icon(
               CupertinoIcons.chat_bubble_fill,
-              color: AppConstants.primaryColor,
+              color: theme.primaryColor,
               size: 20,
             ),
           ],
@@ -249,7 +261,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppThemeData theme) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.paddingXLarge),
@@ -260,20 +272,20 @@ class _NewChatScreenState extends State<NewChatScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppConstants.primaryColor.withOpacity(0.1),
+                color: theme.primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.person_2,
                 size: 40,
-                color: AppConstants.primaryColor,
+                color: theme.primaryColor,
               ),
             ),
             const SizedBox(height: AppConstants.paddingLarge),
             Text(
               _isSearching ? 'No friends found' : 'No friends yet',
               style: AppConstants.titleMedium.copyWith(
-                color: CupertinoColors.label,
+                color: theme.textPrimary,
               ),
             ),
             const SizedBox(height: AppConstants.paddingMedium),
@@ -282,7 +294,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
                   ? 'Try searching with a different name or email.'
                   : 'Add friends to start chatting with them.',
               style: AppConstants.bodyMedium.copyWith(
-                color: CupertinoColors.secondaryLabel,
+                color: theme.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),

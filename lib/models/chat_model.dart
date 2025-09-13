@@ -44,6 +44,23 @@ class Chat {
     };
   }
 
+  // Convert Chat to Map for JSON serialization (cache)
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'id': id,
+      'participants': participants,
+      'lastMessage': lastMessage,
+      'lastMessageTime': lastMessageTime?.millisecondsSinceEpoch,
+      'lastMessageSenderId': lastMessageSenderId,
+      'unreadCount': unreadCount,
+      'isGroup': isGroup,
+      'groupName': groupName,
+      'groupImageUrl': groupImageUrl,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'createdBy': createdBy,
+    };
+  }
+
   // Create Chat from Firestore document
   factory Chat.fromMap(Map<String, dynamic> map) {
     return Chat(
@@ -61,10 +78,65 @@ class Chat {
     );
   }
 
+  // Create Chat from JSON Map (cache)
+  factory Chat.fromJsonMap(Map<String, dynamic> map) {
+    return Chat(
+      id: map['id'] ?? '',
+      participants: List<String>.from(map['participants'] ?? []),
+      lastMessage: map['lastMessage'],
+      lastMessageTime: map['lastMessageTime'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['lastMessageTime'])
+          : null,
+      lastMessageSenderId: map['lastMessageSenderId'],
+      unreadCount: Map<String, int>.from(map['unreadCount'] ?? {}),
+      isGroup: map['isGroup'] ?? false,
+      groupName: map['groupName'],
+      groupImageUrl: map['groupImageUrl'],
+      createdAt: map['createdAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
+          : DateTime.now(),
+      createdBy: map['createdBy'] ?? '',
+    );
+  }
+
   // Create Chat from Firestore DocumentSnapshot
   factory Chat.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Chat.fromMap(data);
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('Document data is null');
+    }
+    
+    // Safe type casting for web compatibility
+    Map<String, dynamic> safeData;
+    try {
+      if (data is Map<String, dynamic>) {
+        safeData = data;
+      } else {
+        // Handle LegacyJavaScriptObject case - convert to Map first
+        final Map<dynamic, dynamic> rawMap = data as Map<dynamic, dynamic>;
+        safeData = <String, dynamic>{};
+        rawMap.forEach((key, value) {
+          safeData[key.toString()] = value;
+        });
+      }
+    } catch (e) {
+      // Fallback: try to extract data manually
+      safeData = {
+        'id': doc.id,
+        'participants': [],
+        'lastMessage': null,
+        'lastMessageTime': null,
+        'lastMessageSenderId': null,
+        'unreadCount': <String, int>{},
+        'isGroup': false,
+        'groupName': null,
+        'groupImageUrl': null,
+        'createdAt': Timestamp.now(),
+        'createdBy': '',
+      };
+    }
+    
+    return Chat.fromMap(safeData);
   }
 
   // Create a copy of Chat with updated fields

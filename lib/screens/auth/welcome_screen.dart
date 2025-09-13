@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -6,13 +8,17 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: AppConstants.backgroundColor,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppConstants.paddingLarge),
-          child: Column(
-            children: [
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
+        
+        return CupertinoPageScaffold(
+          backgroundColor: theme.backgroundColor,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(AppConstants.paddingLarge),
+              child: Column(
+                children: [
               const Spacer(flex: 2),
               
               // App Logo/Icon
@@ -36,7 +42,7 @@ class WelcomeScreen extends StatelessWidget {
               Text(
                 AppConstants.appName,
                 style: AppConstants.titleLarge.copyWith(
-                  color: CupertinoColors.label,
+                  color: theme.textPrimary,
                 ),
               ),
               
@@ -47,7 +53,7 @@ class WelcomeScreen extends StatelessWidget {
                 'Connect with friends and family\nthrough secure messaging',
                 textAlign: TextAlign.center,
                 style: AppConstants.bodyLarge.copyWith(
-                  color: CupertinoColors.secondaryLabel,
+                  color: theme.textSecondary,
                 ),
               ),
               
@@ -57,6 +63,7 @@ class WelcomeScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: CupertinoButton.filled(
+                  color: theme.primaryColor,
                   onPressed: () {
                     Navigator.of(context).pushNamed('/login');
                   },
@@ -80,14 +87,14 @@ class WelcomeScreen extends StatelessWidget {
                 child: RichText(
                   text: TextSpan(
                     style: AppConstants.bodyMedium.copyWith(
-                      color: CupertinoColors.secondaryLabel,
+                      color: theme.textSecondary,
                     ),
                     children: [
                       const TextSpan(text: "Don't have an account? "),
                       TextSpan(
                         text: AppStrings.signUp,
-                        style: const TextStyle(
-                          color: AppConstants.primaryColor,
+                        style: TextStyle(
+                          color: theme.primaryColor,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -96,11 +103,13 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
               
-              const Spacer(),
-            ],
+                  const Spacer(),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

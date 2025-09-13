@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/common/loading_overlay.dart';
 import '../../widgets/common/profile_image_picker.dart';
 import '../../utils/constants.dart';
@@ -74,14 +75,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _showSuccessDialog() {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Profile Updated'),
-        content: const Text('Your profile has been updated successfully.'),
+        title: Text('Profile Updated', style: TextStyle(color: theme.textPrimary)),
+        content: Text('Your profile has been updated successfully.', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('OK'),
+            child: Text('OK', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -90,14 +92,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _showErrorDialog(String error) {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Error'),
-        content: Text(error),
+        title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+        content: Text(error, style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('OK'),
+            child: Text('OK', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -107,16 +110,22 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<AuthProvider, ThemeProvider>(
+      builder: (context, authProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         return LoadingOverlay(
           isLoading: authProvider.isLoading,
           child: CupertinoPageScaffold(
+            backgroundColor: theme.backgroundColor,
             navigationBar: CupertinoNavigationBar(
-              middle: const Text('Edit Profile'),
+              backgroundColor: theme.backgroundColor,
+              middle: Text(
+                'Edit Profile',
+                style: TextStyle(color: theme.textPrimary),
+              ),
               leading: CupertinoButton(
                 padding: EdgeInsets.zero,
-                child: const Text('Cancel'),
+                child: Text('Cancel', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               trailing: CupertinoButton(
@@ -126,7 +135,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   'Save',
                   style: TextStyle(
                     fontWeight: _hasChanges ? FontWeight.w600 : FontWeight.normal,
-                    color: _hasChanges ? CupertinoColors.activeBlue : CupertinoColors.inactiveGray,
+                    color: _hasChanges ? theme.primaryColor : theme.textSecondary,
                   ),
                 ),
               ),
@@ -152,12 +161,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     
                     // Name Field
                     CupertinoFormSection.insetGrouped(
-                      header: const Text('PROFILE INFORMATION'),
+                      backgroundColor: theme.cardColor,
+                      header: Text(
+                        'PROFILE INFORMATION',
+                        style: TextStyle(color: theme.textSecondary),
+                      ),
                       children: [
                         CupertinoTextFormFieldRow(
                           controller: _nameController,
-                          prefix: const Text('Name'),
+                          prefix: Text(
+                            'Name',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
                           placeholder: 'Enter your name',
+                          style: TextStyle(color: theme.textPrimary),
+                          placeholderStyle: TextStyle(color: theme.textSecondary),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Name is required';
@@ -170,10 +188,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                         CupertinoTextFormFieldRow(
                           initialValue: authProvider.currentUser?.email ?? '',
-                          prefix: const Text('Email'),
+                          prefix: Text(
+                            'Email',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
                           enabled: false,
-                          style: const TextStyle(
-                            color: CupertinoColors.inactiveGray,
+                          style: TextStyle(
+                            color: theme.textSecondary,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.cardColor,
                           ),
                         ),
                       ],
@@ -183,16 +207,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     
                     // Account Information
                     CupertinoFormSection.insetGrouped(
-                      header: const Text('ACCOUNT'),
+                      backgroundColor: theme.cardColor,
+                      header: Text(
+                        'ACCOUNT',
+                        style: TextStyle(color: theme.textSecondary),
+                      ),
                       children: [
                         CupertinoFormRow(
-                          prefix: const Text('Member Since'),
+                          prefix: Text(
+                            'Member Since',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
                           child: Text(
                             authProvider.currentUser?.createdAt != null
                                 ? '${authProvider.currentUser!.createdAt.day}/${authProvider.currentUser!.createdAt.month}/${authProvider.currentUser!.createdAt.year}'
                                 : 'Unknown',
-                            style: const TextStyle(
-                              color: CupertinoColors.inactiveGray,
+                            style: TextStyle(
+                              color: theme.textSecondary,
                             ),
                           ),
                         ),

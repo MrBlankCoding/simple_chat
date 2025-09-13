@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/user_model.dart';
 import '../../providers/friend_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 
@@ -18,8 +19,9 @@ class UserSearchItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<FriendProvider>(
-      builder: (context, friendProvider, child) {
+    return Consumer2<FriendProvider, ThemeProvider>(
+      builder: (context, friendProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         final isFriend = friendProvider.isFriend(user.uid);
         final hasPendingRequest = friendProvider.hasPendingRequest(user.uid);
         final hasIncomingRequest = friendProvider.hasIncomingRequest(user.uid);
@@ -28,7 +30,7 @@ class UserSearchItem extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           decoration: BoxDecoration(
-            color: AppConstants.surfaceColor,
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
           ),
           child: Row(
@@ -36,7 +38,7 @@ class UserSearchItem extends StatelessWidget {
               // Profile Image with Online Status
               Stack(
                 children: [
-                  _buildProfileImage(),
+                  _buildProfileImage(theme),
                   if (user.isOnline)
                     Positioned(
                       right: 0,
@@ -45,10 +47,10 @@ class UserSearchItem extends StatelessWidget {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                          color: AppConstants.successColor,
+                          color: theme.onlineColor,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppConstants.surfaceColor,
+                            color: theme.cardColor,
                             width: 2,
                           ),
                         ),
@@ -68,14 +70,14 @@ class UserSearchItem extends StatelessWidget {
                       user.name,
                       style: AppConstants.bodyLarge.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: theme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       user.email,
                       style: AppConstants.bodyMedium.copyWith(
-                        color: CupertinoColors.secondaryLabel,
+                        color: theme.textSecondary,
                       ),
                     ),
                     if (user.isOnline) ...[
@@ -83,7 +85,7 @@ class UserSearchItem extends StatelessWidget {
                       Text(
                         AppStrings.online,
                         style: AppConstants.caption.copyWith(
-                          color: AppConstants.successColor,
+                          color: theme.onlineColor,
                         ),
                       ),
                     ],
@@ -96,6 +98,7 @@ class UserSearchItem extends StatelessWidget {
                 isFriend, 
                 hasPendingRequest, 
                 hasIncomingRequest,
+                theme,
               ),
             ],
           ),
@@ -104,7 +107,7 @@ class UserSearchItem extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileImage() {
+  Widget _buildProfileImage(theme) {
     if (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty) {
       return ClipOval(
         child: CachedNetworkImage(
@@ -112,28 +115,28 @@ class UserSearchItem extends StatelessWidget {
           width: AppConstants.profileImageSize,
           height: AppConstants.profileImageSize,
           fit: BoxFit.cover,
-          placeholder: (context, url) => _buildPlaceholder(),
-          errorWidget: (context, url, error) => _buildPlaceholder(),
+          placeholder: (context, url) => _buildPlaceholder(theme),
+          errorWidget: (context, url, error) => _buildPlaceholder(theme),
         ),
       );
     } else {
-      return _buildPlaceholder();
+      return _buildPlaceholder(theme);
     }
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(theme) {
     return Container(
       width: AppConstants.profileImageSize,
       height: AppConstants.profileImageSize,
       decoration: BoxDecoration(
-        color: AppConstants.primaryColor.withOpacity(0.1),
+        color: theme.primaryColor.withOpacity(0.1),
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           AppHelpers.getInitials(user.name),
           style: AppConstants.bodyMedium.copyWith(
-            color: AppConstants.primaryColor,
+            color: theme.primaryColor,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -145,6 +148,7 @@ class UserSearchItem extends StatelessWidget {
     bool isFriend, 
     bool hasPendingRequest, 
     bool hasIncomingRequest,
+    theme,
   ) {
     if (isFriend) {
       return Container(
@@ -153,22 +157,22 @@ class UserSearchItem extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: AppConstants.successColor.withOpacity(0.1),
+          color: theme.onlineColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.checkmark_circle_fill,
-              color: AppConstants.successColor,
+              color: theme.onlineColor,
               size: 16,
             ),
             const SizedBox(width: 4),
             Text(
               'Friends',
               style: AppConstants.bodyMedium.copyWith(
-                color: AppConstants.successColor,
+                color: theme.onlineColor,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -182,13 +186,13 @@ class UserSearchItem extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: CupertinoColors.systemGrey4,
+          color: theme.textSecondary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
         ),
         child: Text(
           'Pending',
           style: AppConstants.bodyMedium.copyWith(
-            color: CupertinoColors.secondaryLabel,
+            color: theme.textSecondary,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -200,13 +204,13 @@ class UserSearchItem extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: AppConstants.primaryColor.withOpacity(0.1),
+          color: theme.primaryColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
         ),
         child: Text(
           'Respond',
           style: AppConstants.bodyMedium.copyWith(
-            color: AppConstants.primaryColor,
+            color: theme.primaryColor,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -217,7 +221,7 @@ class UserSearchItem extends StatelessWidget {
           horizontal: 16,
           vertical: 8,
         ),
-        color: AppConstants.primaryColor,
+        color: theme.primaryColor,
         borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
         onPressed: onSendRequest,
         child: const Text(

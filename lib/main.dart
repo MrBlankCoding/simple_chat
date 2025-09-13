@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/friend_provider.dart';
+import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -18,6 +19,7 @@ import 'screens/profile/edit_profile_screen.dart';
 import 'screens/profile/notifications_screen.dart';
 import 'screens/profile/privacy_screen.dart';
 import 'screens/profile/about_screen.dart';
+import 'screens/profile/theme_settings_screen.dart';
 import 'utils/constants.dart';
 
 void main() async {
@@ -43,18 +45,16 @@ class SimpleChat extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => FriendProvider()),
       ],
-      child: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
+      child: Consumer2<AuthProvider, ThemeProvider>(
+        builder: (context, authProvider, themeProvider, child) {
           return CupertinoApp(
             title: AppConstants.appName,
-            theme: const CupertinoThemeData(
-              primaryColor: AppConstants.primaryColor,
-              scaffoldBackgroundColor: AppConstants.backgroundColor,
-            ),
+            theme: themeProvider.currentTheme.cupertinoThemeData,
             home: _buildHome(authProvider),
             routes: {
               '/welcome': (context) => const WelcomeScreen(),
@@ -98,6 +98,10 @@ class SimpleChat extends StatelessWidget {
                 case '/about':
                   return CupertinoPageRoute(
                     builder: (context) => const AboutScreen(),
+                  );
+                case '/theme-settings':
+                  return CupertinoPageRoute(
+                    builder: (context) => const ThemeSettingsScreen(),
                   );
               }
               return null;

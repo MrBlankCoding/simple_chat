@@ -35,6 +35,18 @@ class FriendRequest {
     };
   }
 
+  // Convert FriendRequest to Map for JSON serialization (cache)
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'id': id,
+      'senderId': senderId,
+      'receiverId': receiverId,
+      'status': status.toString().split('.').last,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'respondedAt': respondedAt?.millisecondsSinceEpoch,
+    };
+  }
+
   // Create FriendRequest from Firestore document
   factory FriendRequest.fromMap(Map<String, dynamic> map) {
     return FriendRequest(
@@ -50,10 +62,58 @@ class FriendRequest {
     );
   }
 
+  // Create FriendRequest from JSON Map (cache)
+  factory FriendRequest.fromJsonMap(Map<String, dynamic> map) {
+    return FriendRequest(
+      id: map['id'] ?? '',
+      senderId: map['senderId'] ?? '',
+      receiverId: map['receiverId'] ?? '',
+      status: FriendRequestStatus.values.firstWhere(
+        (e) => e.toString().split('.').last == map['status'],
+        orElse: () => FriendRequestStatus.pending,
+      ),
+      createdAt: map['createdAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
+          : DateTime.now(),
+      respondedAt: map['respondedAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['respondedAt'])
+          : null,
+    );
+  }
+
   // Create FriendRequest from Firestore DocumentSnapshot
   factory FriendRequest.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return FriendRequest.fromMap(data);
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('Document data is null');
+    }
+    
+    // Safe type casting for web compatibility
+    Map<String, dynamic> safeData;
+    try {
+      if (data is Map<String, dynamic>) {
+        safeData = data;
+      } else {
+        // Handle LegacyJavaScriptObject case - convert to Map first
+        final Map<dynamic, dynamic> rawMap = data as Map<dynamic, dynamic>;
+        safeData = <String, dynamic>{};
+        rawMap.forEach((key, value) {
+          safeData[key.toString()] = value;
+        });
+      }
+    } catch (e) {
+      // Fallback: try to extract data manually
+      safeData = {
+        'id': doc.id,
+        'senderId': '',
+        'receiverId': '',
+        'status': 'pending',
+        'createdAt': Timestamp.now(),
+        'respondedAt': null,
+      };
+    }
+    
+    return FriendRequest.fromMap(safeData);
   }
 
   // Create a copy of FriendRequest with updated fields
@@ -150,8 +210,35 @@ class Friendship {
 
   // Create Friendship from Firestore DocumentSnapshot
   factory Friendship.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Friendship.fromMap(data);
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('Document data is null');
+    }
+    
+    // Safe type casting for web compatibility
+    Map<String, dynamic> safeData;
+    try {
+      if (data is Map<String, dynamic>) {
+        safeData = data;
+      } else {
+        // Handle LegacyJavaScriptObject case - convert to Map first
+        final Map<dynamic, dynamic> rawMap = data as Map<dynamic, dynamic>;
+        safeData = <String, dynamic>{};
+        rawMap.forEach((key, value) {
+          safeData[key.toString()] = value;
+        });
+      }
+    } catch (e) {
+      // Fallback: try to extract data manually
+      safeData = {
+        'id': doc.id,
+        'user1Id': '',
+        'user2Id': '',
+        'createdAt': Timestamp.now(),
+      };
+    }
+    
+    return Friendship.fromMap(safeData);
   }
 
   // Get the other user's ID in the friendship

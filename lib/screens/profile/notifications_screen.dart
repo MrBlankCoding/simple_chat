@@ -1,4 +1,6 @@
 import 'package:flutter/cupertino.dart';
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -17,20 +19,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Notifications'),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
+        
+        return CupertinoPageScaffold(
+          backgroundColor: theme.backgroundColor,
+          navigationBar: CupertinoNavigationBar(
+            backgroundColor: theme.backgroundColor,
+            middle: Text(
+              'Notifications',
+              style: TextStyle(color: theme.textPrimary),
+            ),
+          ),
       child: SafeArea(
         child: ListView(
           children: [
             CupertinoFormSection.insetGrouped(
-              header: const Text('PUSH NOTIFICATIONS'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'PUSH NOTIFICATIONS',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Push Notifications'),
+                  prefix: Text(
+                    'Push Notifications',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _pushNotifications,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _pushNotifications = value;
@@ -42,12 +61,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
             
             CupertinoFormSection.insetGrouped(
-              header: const Text('MESSAGE SETTINGS'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'MESSAGE SETTINGS',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('New Messages'),
+                  prefix: Text(
+                    'New Messages',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _messageNotifications,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: _pushNotifications ? (value) {
                       setState(() {
                         _messageNotifications = value;
@@ -56,9 +83,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Friend Requests'),
+                  prefix: Text(
+                    'Friend Requests',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _friendRequestNotifications,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: _pushNotifications ? (value) {
                       setState(() {
                         _friendRequestNotifications = value;
@@ -70,12 +101,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
             
             CupertinoFormSection.insetGrouped(
-              header: const Text('ALERT STYLE'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'ALERT STYLE',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Sound'),
+                  prefix: Text(
+                    'Sound',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _soundEnabled,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: _pushNotifications ? (value) {
                       setState(() {
                         _soundEnabled = value;
@@ -84,9 +123,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Vibration'),
+                  prefix: Text(
+                    'Vibration',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _vibrationEnabled,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: _pushNotifications ? (value) {
                       setState(() {
                         _vibrationEnabled = value;
@@ -104,7 +147,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Text(
                 'Push notifications help you stay connected with your friends. You can customize which notifications you receive and how you\'re alerted.',
                 style: AppConstants.caption.copyWith(
-                  color: CupertinoColors.secondaryLabel,
+                  color: theme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -112,6 +155,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ],
         ),
       ),
+        );
+      },
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/loading_overlay.dart';
@@ -85,16 +86,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<AuthProvider, ThemeProvider>(
+      builder: (context, authProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
+        
         return LoadingOverlay(
           isLoading: authProvider.isLoading,
           child: CupertinoPageScaffold(
-            backgroundColor: AppConstants.backgroundColor,
-            navigationBar: const CupertinoNavigationBar(
-              backgroundColor: AppConstants.backgroundColor,
+            backgroundColor: theme.backgroundColor,
+            navigationBar: CupertinoNavigationBar(
+              backgroundColor: theme.backgroundColor,
               border: null,
-              middle: Text(AppStrings.createAccount),
+              middle: Text(
+                AppStrings.createAccount,
+                style: TextStyle(color: theme.textPrimary),
+              ),
             ),
             child: SafeArea(
               child: SingleChildScrollView(
@@ -110,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Text(
                         'Create Account',
                         style: AppConstants.titleMedium.copyWith(
-                          color: CupertinoColors.label,
+                          color: theme.textPrimary,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -120,7 +126,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Text(
                         'Join SimpleChat to connect with friends',
                         style: AppConstants.bodyMedium.copyWith(
-                          color: CupertinoColors.secondaryLabel,
+                          color: theme.textSecondary,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -148,7 +154,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         textCapitalization: TextCapitalization.words,
                         validator: AppHelpers.validateName,
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceColor,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                         ),
                         padding: const EdgeInsets.symmetric(
@@ -167,7 +173,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         textInputAction: TextInputAction.next,
                         validator: AppHelpers.validateEmail,
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceColor,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                         ),
                         padding: const EdgeInsets.symmetric(
@@ -181,7 +187,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       // Password Field
                       Container(
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceColor,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                         ),
                         child: Row(
@@ -211,7 +217,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 _obscurePassword 
                                   ? CupertinoIcons.eye 
                                   : CupertinoIcons.eye_slash,
-                                color: CupertinoColors.secondaryLabel,
+                                color: theme.textSecondary,
                               ),
                             ),
                           ],
@@ -223,7 +229,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       // Confirm Password Field
                       Container(
                         decoration: BoxDecoration(
-                          color: AppConstants.surfaceColor,
+                          color: theme.cardColor,
                           borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
                         ),
                         child: Row(
@@ -257,7 +263,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 _obscureConfirmPassword 
                                   ? CupertinoIcons.eye 
                                   : CupertinoIcons.eye_slash,
-                                color: CupertinoColors.secondaryLabel,
+                                color: theme.textSecondary,
                               ),
                             ),
                           ],
@@ -268,6 +274,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       
                       // Sign Up Button
                       CupertinoButton.filled(
+                        color: theme.primaryColor,
                         onPressed: authProvider.isLoading ? null : _signUp,
                         child: const Text(
                           AppStrings.createAccount,
@@ -288,14 +295,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: RichText(
                           text: TextSpan(
                             style: AppConstants.bodyMedium.copyWith(
-                              color: CupertinoColors.secondaryLabel,
+                              color: theme.textSecondary,
                             ),
                             children: [
                               const TextSpan(text: "Already have an account? "),
                               TextSpan(
                                 text: AppStrings.signIn,
-                                style: const TextStyle(
-                                  color: AppConstants.primaryColor,
+                                style: TextStyle(
+                                  color: theme.primaryColor,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),

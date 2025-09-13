@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/theme_provider.dart';
+import '../../themes/app_theme.dart';
 import '../../utils/constants.dart';
 import 'new_chat_screen.dart';
 import '../../widgets/chat/chat_list_item.dart';
@@ -17,8 +19,9 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
-    return Consumer2<AuthProvider, ChatProvider>(
-      builder: (context, authProvider, chatProvider, child) {
+    return Consumer3<AuthProvider, ChatProvider, ThemeProvider>(
+      builder: (context, authProvider, chatProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         final currentUser = authProvider.currentUser;
         if (currentUser == null) {
           return const CupertinoPageScaffold(
@@ -29,36 +32,40 @@ class _ChatListScreenState extends State<ChatListScreen> {
         }
 
         return CupertinoPageScaffold(
-          backgroundColor: AppConstants.backgroundColor,
+          backgroundColor: theme.backgroundColor,
           navigationBar: CupertinoNavigationBar(
-            backgroundColor: AppConstants.backgroundColor,
+            backgroundColor: theme.backgroundColor,
             border: null,
-            middle: const Text(AppStrings.chats),
+            middle: Text(
+              AppStrings.chats,
+              style: TextStyle(color: theme.textPrimary),
+            ),
             trailing: CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () {
-                Navigator.of(context).pushNamed('/new-chat');
+                Navigator.of(context, rootNavigator: true).pushNamed('/new-chat');
               },
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.add,
                 size: 24,
+                color: theme.primaryColor,
               ),
             ),
           ),
           child: LoadingOverlay(
             isLoading: chatProvider.isLoading,
-            child: _buildChatList(chatProvider, currentUser.uid),
+            child: _buildChatList(chatProvider, currentUser.uid, theme),
           ),
         );
       },
     );
   }
 
-  Widget _buildChatList(ChatProvider chatProvider, String currentUserId) {
+  Widget _buildChatList(ChatProvider chatProvider, String currentUserId, AppThemeData theme) {
     final chats = chatProvider.chats;
 
     if (chats.isEmpty) {
-      return _buildEmptyState();
+      return _buildEmptyState(theme);
     }
 
     return ListView.builder(
@@ -69,7 +76,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           chat: chat,
           currentUserId: currentUserId,
           onTap: () {
-            Navigator.of(context).pushNamed(
+            Navigator.of(context, rootNavigator: true).pushNamed(
               '/chat',
               arguments: {'chatId': chat.id},
             );
@@ -79,7 +86,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(AppThemeData theme) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppConstants.paddingXLarge),
@@ -90,32 +97,33 @@ class _ChatListScreenState extends State<ChatListScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppConstants.primaryColor.withOpacity(0.1),
+                color: theme.primaryColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 CupertinoIcons.chat_bubble_2,
                 size: 40,
-                color: AppConstants.primaryColor,
+                color: theme.primaryColor,
               ),
             ),
             const SizedBox(height: AppConstants.paddingLarge),
             Text(
               'No Conversations Yet',
               style: AppConstants.titleMedium.copyWith(
-                color: CupertinoColors.label,
+                color: theme.textPrimary,
               ),
             ),
             const SizedBox(height: AppConstants.paddingMedium),
             Text(
               'Start a conversation with your friends to see your chats here.',
               style: AppConstants.bodyMedium.copyWith(
-                color: CupertinoColors.secondaryLabel,
+                color: theme.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppConstants.paddingXLarge),
             CupertinoButton.filled(
+              color: theme.primaryColor,
               onPressed: () {
                 Navigator.push(
                   context,

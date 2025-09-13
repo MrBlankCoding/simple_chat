@@ -9,7 +9,6 @@ import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
-import '../../widgets/common/loading_overlay.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -28,6 +27,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final TextEditingController _messageController = TextEditingController();
   Chat? _currentChat;
   Timer? _typingTimer;
+  List<Message> _previousMessages = [];
+  bool _isDisposed = false;
 
   // Getter for _chat to access the current chat
   Chat? get _chat => _currentChat;
@@ -42,6 +43,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _typingTimer?.cancel();
     _scrollController.dispose();
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     chatProvider.unsubscribeFromChat(widget.chatId);
@@ -50,6 +53,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _initializeChat() {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    
+    // Subscribe to chat messages
     chatProvider.subscribeToChat(widget.chatId);
     
     // Find the chat in the provider
@@ -65,10 +70,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     
     // Mark messages as read
     chatProvider.markMessagesAsRead(widget.chatId);
+    
+    // Initial scroll to bottom after messages load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed && mounted) {
+        _scrollToBottom();
+      }
+    });
   }
 
   void _scrollToBottom() {
-    if (_scrollController.hasClients) {
+    if (!_isDisposed && mounted && _scrollController.hasClients) {
       _scrollController.animateTo(
         0,
         duration: AppConstants.animationDurationShort,
@@ -92,10 +104,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         final chatTitle = _chat != null 
           ? chatProvider.getChatTitle(_chat!, currentUser.uid)
           : 'Chat';
+        
+        // Auto-scroll when new messages arrive (only if not disposed)
+        if (!_isDisposed && messages.length > _previousMessages.length) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_isDisposed && mounted) {
+              _scrollToBottom();
+            }
+          });
+        }
+        _previousMessages = List.from(messages);
 
-        return LoadingOverlay(
-          isLoading: chatProvider.isLoading,
-          child: CupertinoPageScaffold(
+        return CupertinoPageScaffold(
             backgroundColor: AppConstants.backgroundColor,
             navigationBar: CupertinoNavigationBar(
               backgroundColor: AppConstants.backgroundColor,
@@ -143,7 +163,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ),
               ],
             ),
-          ),
         );
       },
     );
@@ -292,14 +311,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Future<void> _sendMessage(ChatProvider chatProvider, String text) async {
     try {
       await chatProvider.sendTextMessage(widget.chatId, text);
-      _scrollToBottom();
+      // Scroll will happen automatically when new message arrives via stream
     } catch (e) {
       if (mounted) {
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
             title: const Text('Error'),
-            content: const Text('Failed to send message. Please try again.'),
+            content: Text('Failed to send message: ${e.toString()}'),
             actions: [
               CupertinoDialogAction(
                 child: const Text('OK'),

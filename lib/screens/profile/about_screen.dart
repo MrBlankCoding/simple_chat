@@ -1,7 +1,9 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -24,15 +26,16 @@ class AboutScreen extends StatelessWidget {
   }
 
   void _copyToClipboard(BuildContext context, String text, String label) {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     Clipboard.setData(ClipboardData(text: text));
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('$label Copied'),
-        content: Text('$label has been copied to clipboard.'),
+        title: Text('$label Copied', style: TextStyle(color: theme.textPrimary)),
+        content: Text('$label has been copied to clipboard.', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('OK'),
+            child: Text('OK', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -60,38 +63,48 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('About'),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
+        
+        return CupertinoPageScaffold(
+          backgroundColor: theme.backgroundColor,
+          navigationBar: CupertinoNavigationBar(
+            backgroundColor: theme.backgroundColor,
+            middle: Text(
+              'About',
+              style: TextStyle(color: theme.textPrimary),
+            ),
+          ),
       child: SafeArea(
         child: ListView(
           children: [
             const SizedBox(height: AppConstants.paddingLarge),
             
             // App Icon and Name
-            const Center(
+            Center(
               child: Column(
                 children: [
                   Icon(
                     CupertinoIcons.chat_bubble_2_fill,
                     size: 80,
-                    color: CupertinoColors.activeBlue,
+                    color: theme.primaryColor,
                   ),
-                  SizedBox(height: AppConstants.paddingMedium),
+                  const SizedBox(height: AppConstants.paddingMedium),
                   Text(
                     'SimpleChat',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
+                      color: theme.textPrimary,
                     ),
                   ),
-                  SizedBox(height: AppConstants.paddingSmall),
+                  const SizedBox(height: AppConstants.paddingSmall),
                   Text(
                     'Version 1.0.0',
                     style: TextStyle(
                       fontSize: 16,
-                      color: CupertinoColors.secondaryLabel,
+                      color: theme.textSecondary,
                     ),
                   ),
                 ],
@@ -102,29 +115,42 @@ class AboutScreen extends StatelessWidget {
             
             // App Information
             CupertinoFormSection.insetGrouped(
-              header: const Text('APP INFORMATION'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'APP INFORMATION',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
-                const CupertinoFormRow(
-                  prefix: Text('Version'),
+                CupertinoFormRow(
+                  prefix: Text(
+                    'Version',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: Text(
                     '1.0.0',
-                    style: TextStyle(color: CupertinoColors.secondaryLabel),
-                  ),
-                ),
-                const CupertinoFormRow(
-                  prefix: Text('Build'),
-                  child: Text(
-                    '1',
-                    style: TextStyle(color: CupertinoColors.secondaryLabel),
+                    style: TextStyle(color: theme.textSecondary),
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Developer'),
+                  prefix: Text(
+                    'Build',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
+                  child: Text(
+                    '1',
+                    style: TextStyle(color: theme.textSecondary),
+                  ),
+                ),
+                CupertinoFormRow(
+                  prefix: Text(
+                    'Developer',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: GestureDetector(
                     onTap: () => _copyToClipboard(context, 'SimpleChat Team', 'Developer'),
-                    child: const Text(
+                    child: Text(
                       'SimpleChat Team',
-                      style: TextStyle(color: CupertinoColors.activeBlue),
+                      style: TextStyle(color: theme.primaryColor),
                     ),
                   ),
                 ),
@@ -133,26 +159,34 @@ class AboutScreen extends StatelessWidget {
             
             // Legal
             CupertinoFormSection.insetGrouped(
-              header: const Text('LEGAL'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'LEGAL',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Privacy Policy'),
+                  prefix: Text(
+                    'Privacy Policy',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('View'),
+                    child: Text('View', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () async {
                       try {
                         await _launchURL('https://simplechat.com/privacy');
                       } catch (e) {
                         if (context.mounted) {
+                          final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
                           showCupertinoDialog(
                             context: context,
                             builder: (context) => CupertinoAlertDialog(
-                              title: const Text('Error'),
-                              content: const Text('Could not open privacy policy. Please visit simplechat.com/privacy'),
+                              title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+                              content: Text('Could not open privacy policy. Please visit simplechat.com/privacy', style: TextStyle(color: theme.textSecondary)),
                               actions: [
                                 CupertinoDialogAction(
-                                  child: const Text('OK'),
+                                  child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                                   onPressed: () => Navigator.of(context).pop(),
                                 ),
                               ],
@@ -164,23 +198,27 @@ class AboutScreen extends StatelessWidget {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Terms of Service'),
+                  prefix: Text(
+                    'Terms of Service',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('View'),
+                    child: Text('View', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () async {
                       try {
                         await _launchURL('https://simplechat.com/terms');
                       } catch (e) {
                         if (context.mounted) {
+                          final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
                           showCupertinoDialog(
                             context: context,
                             builder: (context) => CupertinoAlertDialog(
-                              title: const Text('Error'),
-                              content: const Text('Could not open terms of service. Please visit simplechat.com/terms'),
+                              title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+                              content: Text('Could not open terms of service. Please visit simplechat.com/terms', style: TextStyle(color: theme.textSecondary)),
                               actions: [
                                 CupertinoDialogAction(
-                                  child: const Text('OK'),
+                                  child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                                   onPressed: () => Navigator.of(context).pop(),
                                 ),
                               ],
@@ -192,10 +230,13 @@ class AboutScreen extends StatelessWidget {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Open Source Licenses'),
+                  prefix: Text(
+                    'Open Source Licenses',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('View'),
+                    child: Text('View', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () => _showLicenses(context),
                   ),
                 ),
@@ -204,36 +245,47 @@ class AboutScreen extends StatelessWidget {
             
             // Support
             CupertinoFormSection.insetGrouped(
-              header: const Text('SUPPORT'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'SUPPORT',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Contact Support'),
+                  prefix: Text(
+                    'Contact Support',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: GestureDetector(
                     onTap: () => _copyToClipboard(context, 'support@simplechat.com', 'Email'),
-                    child: const Text(
+                    child: Text(
                       'support@simplechat.com',
-                      style: TextStyle(color: CupertinoColors.activeBlue),
+                      style: TextStyle(color: theme.primaryColor),
                     ),
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Rate App'),
+                  prefix: Text(
+                    'Rate App',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('Rate on App Store'),
+                    child: Text('Rate on App Store', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () async {
                       try {
                         await _launchURL('https://apps.apple.com/app/id123456789?action=write-review');
                       } catch (e) {
                         if (context.mounted) {
+                          final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
                           showCupertinoDialog(
                             context: context,
                             builder: (context) => CupertinoAlertDialog(
-                              title: const Text('Error'),
-                              content: const Text('Could not open App Store. Please search for SimpleChat in the App Store.'),
+                              title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+                              content: Text('Could not open App Store. Please search for SimpleChat in the App Store.', style: TextStyle(color: theme.textSecondary)),
                               actions: [
                                 CupertinoDialogAction(
-                                  child: const Text('OK'),
+                                  child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                                   onPressed: () => Navigator.of(context).pop(),
                                 ),
                               ],
@@ -245,21 +297,25 @@ class AboutScreen extends StatelessWidget {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Share App'),
+                  prefix: Text(
+                    'Share App',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('Share'),
+                    child: Text('Share', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () async {
                       await _shareApp();
                       if (context.mounted) {
+                        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
                         showCupertinoDialog(
                           context: context,
                           builder: (context) => CupertinoAlertDialog(
-                            title: const Text('App Link Copied'),
-                            content: const Text('The app link has been copied to your clipboard. You can now paste it to share SimpleChat with others!'),
+                            title: Text('App Link Copied', style: TextStyle(color: theme.textPrimary)),
+                            content: Text('The app link has been copied to your clipboard. You can now paste it to share SimpleChat with others!', style: TextStyle(color: theme.textSecondary)),
                             actions: [
                               CupertinoDialogAction(
-                                child: const Text('OK'),
+                                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                                 onPressed: () => Navigator.of(context).pop(),
                               ),
                             ],
@@ -280,7 +336,7 @@ class AboutScreen extends StatelessWidget {
               child: Text(
                 'SimpleChat is a modern, secure messaging app built with Flutter and Firebase. Connect with friends, share moments, and stay in touch with beautiful, intuitive design.',
                 style: AppConstants.body.copyWith(
-                  color: CupertinoColors.secondaryLabel,
+                  color: theme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -292,7 +348,7 @@ class AboutScreen extends StatelessWidget {
               child: Text(
                 '© 2024 SimpleChat Team. All rights reserved.',
                 style: AppConstants.caption.copyWith(
-                  color: CupertinoColors.tertiaryLabel,
+                  color: theme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -300,6 +356,8 @@ class AboutScreen extends StatelessWidget {
           ],
         ),
       ),
+        );
+      },
     );
   }
 }

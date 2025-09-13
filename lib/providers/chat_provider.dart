@@ -41,41 +41,66 @@ class ChatProvider extends ChangeNotifier {
     // Load cached chats first
     _loadCachedChats();
     
+    // Subscribe to real-time chats
+    _subscribeToChats();
+  }
+
+  void _subscribeToChats() {
     _chatsSubscription = _chatService.getUserChats().listen(
       (chats) async {
-        _chats = chats;
-        
-        // Cache the chats
-        await _cacheService.cacheChats(chats);
-        
-        // Load user data for chat participants
-        for (final chat in chats) {
-          for (final participantId in chat.participants) {
-            if (!_users.containsKey(participantId)) {
-              try {
-                // Try to get from cache first
-                UserModel? user = await _cacheService.getCachedUser(participantId);
-                if (user == null) {
-                  user = await _firestoreService.getUserById(participantId);
+        try {
+          // Filter out any null or invalid chats
+          final validChats = chats.where((chat) => chat.id.isNotEmpty).toList();
+          _chats = validChats;
+          
+          // Cache chats (with error handling)
+          try {
+            await _cacheService.cacheChats(validChats);
+          } catch (e) {
+            // Silent cache failure - not critical
+            _errorService.logError('Failed to cache chats', error: e);
+          }
+          
+          // Load user data for each chat (with improved error handling)
+          for (final chat in validChats) {
+            for (final participantId in chat.participants) {
+              if (participantId.isNotEmpty && !_users.containsKey(participantId)) {
+                try {
+                  final user = await _firestoreService.getUserById(participantId);
                   if (user != null) {
-                    await _cacheService.cacheUser(user);
+                    _users[participantId] = user;
+                    // Cache the user data (with error handling)
+                    try {
+                      await _cacheService.cacheUser(user);
+                    } catch (e) {
+                      // Silent cache failure - not critical
+                    }
                   }
+                } catch (e) {
+                  // Log but don't fail the entire subscription
+                  _errorService.logError('Failed to load user $participantId', error: e);
                 }
-                if (user != null) {
-                  _users[participantId] = user;
-                }
-              } catch (e) {
-                _errorService.logError('Failed to load user data', error: e);
               }
             }
           }
+          
+          _clearError(); // Clear any previous errors on successful load
+          notifyListeners();
+        } catch (e) {
+          // Log error but don't crash the subscription
+          _errorService.logError('Error processing chats subscription', error: e);
+          // Don't set UI error for data processing issues
         }
-        
-        notifyListeners();
       },
       onError: (error) {
-        _setError(_errorService.getNetworkErrorMessage(error));
-        _errorService.logError('Error in chats subscription', error: error);
+        // Handle subscription errors gracefully
+        _errorService.logError('Chat subscription error', error: error);
+        // Only set UI error for critical subscription failures
+        if (error.toString().contains('permission-denied') || 
+            error.toString().contains('unauthenticated')) {
+          _setError('Unable to load chats. Please check your connection.');
+        }
+        // For other errors, try to continue with cached data
       },
     );
   }
@@ -92,6 +117,27 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadCachedMessages(String chatId) async {
+    try {
+      final cachedMessages = await _cacheService.getCachedMessages(chatId);
+      if (cachedMessages.isNotEmpty) {
+        _chatMessages[chatId] = cachedMessages;
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load cached messages for chat $chatId', error: e);
+    }
+  }
+
+  Future<void> _cacheMessages(String chatId, List<Message> messages) async {
+    try {
+      await _cacheService.cacheMessages(chatId, messages);
+    } catch (e) {
+      // Silent cache failure - not critical
+      _errorService.logError('Failed to cache messages for chat $chatId', error: e);
+    }
+  }
+
   List<Message> getChatMessages(String chatId) {
     return _chatMessages[chatId] ?? [];
   }
@@ -99,13 +145,19 @@ class ChatProvider extends ChangeNotifier {
   void subscribeToChat(String chatId) {
     if (_messageSubscriptions.containsKey(chatId)) return;
 
+    // Load cached messages first
+    _loadCachedMessages(chatId);
+
     _messageSubscriptions[chatId] = _chatService.getChatMessages(chatId).listen(
       (messages) {
         _chatMessages[chatId] = messages;
+        // Cache messages for offline access
+        _cacheMessages(chatId, messages);
         notifyListeners();
       },
       onError: (error) {
-        _setError(error.toString());
+        _errorService.logError('Message subscription error for chat $chatId', error: error);
+        // Don't set UI error for message subscription issues - continue with cached data
       },
     );
   }
@@ -162,18 +214,16 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> sendTextMessage(String chatId, String text) async {
     try {
-      _setLoading(true);
+      // Don't set loading state for message sending to avoid UI freeze
       await _chatService.sendTextMessage(chatId, text);
       
       // Stop typing indicator when message is sent
       await stopTyping(chatId);
       
-      _setError('');
+      _clearError();
     } catch (e) {
       _setError(_errorService.getFirebaseErrorMessage(e));
       _errorService.logError('Failed to send message', error: e);
-    } finally {
-      _setLoading(false);
     }
   }
 

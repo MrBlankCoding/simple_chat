@@ -17,51 +17,74 @@ class CacheService {
 
   // Cache user data
   Future<void> cacheUser(UserModel user) async {
-    await initialize();
-    await _prefs!.setString('user_${user.uid}', jsonEncode(user.toMap()));
+    try {
+      await initialize();
+      final userJson = jsonEncode(user.toJsonMap());
+      await _prefs!.setString('user_${user.uid}', userJson);
+    } catch (e) {
+      print('Cache warning: Failed to cache user ${user.uid}: $e');
+    }
   }
 
   Future<UserModel?> getCachedUser(String uid) async {
     await initialize();
     final userJson = _prefs!.getString('user_$uid');
     if (userJson != null) {
-      return UserModel.fromMap(jsonDecode(userJson));
+      return UserModel.fromJsonMap(jsonDecode(userJson));
     }
     return null;
   }
 
   // Cache chat messages
   Future<void> cacheMessages(String chatId, List<Message> messages) async {
-    await initialize();
-    final messagesJson = messages.map((m) => m.toMap()).toList();
-    await _prefs!.setString('messages_$chatId', jsonEncode(messagesJson));
+    try {
+      await initialize();
+      final messagesJson = jsonEncode(messages.map((m) => m.toJsonMap()).toList());
+      await _prefs!.setString('messages_$chatId', messagesJson);
+    } catch (e) {
+      print('Cache warning: Failed to cache messages for chat $chatId: $e');
+    }
   }
 
   Future<List<Message>> getCachedMessages(String chatId) async {
-    await initialize();
-    final messagesJson = _prefs!.getString('messages_$chatId');
-    if (messagesJson != null) {
-      final List<dynamic> messagesList = jsonDecode(messagesJson);
-      return messagesList.map((m) => Message.fromMap(m)).toList();
+    try {
+      await initialize();
+      final messagesJson = _prefs!.getString('messages_$chatId');
+      if (messagesJson != null) {
+        final List<dynamic> messagesList = jsonDecode(messagesJson);
+        return messagesList.map((m) => Message.fromJsonMap(m)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Cache warning: Failed to get cached messages for chat $chatId: $e');
+      return [];
     }
-    return [];
   }
 
   // Cache chats
   Future<void> cacheChats(List<Chat> chats) async {
-    await initialize();
-    final chatsJson = chats.map((c) => c.toMap()).toList();
-    await _prefs!.setString('chats', jsonEncode(chatsJson));
+    try {
+      await initialize();
+      final chatsJson = jsonEncode(chats.map((c) => c.toJsonMap()).toList());
+      await _prefs!.setString('chats', chatsJson);
+    } catch (e) {
+      print('Cache warning: Failed to cache chats: $e');
+    }
   }
 
   Future<List<Chat>> getCachedChats() async {
-    await initialize();
-    final chatsJson = _prefs!.getString('chats');
-    if (chatsJson != null) {
-      final List<dynamic> chatsList = jsonDecode(chatsJson);
-      return chatsList.map((c) => Chat.fromMap(c)).toList();
+    try {
+      await initialize();
+      final chatsJson = _prefs!.getString('chats');
+      if (chatsJson != null) {
+        final List<dynamic> chatsList = jsonDecode(chatsJson);
+        return chatsList.map((c) => Chat.fromJsonMap(c)).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Cache warning: Failed to get cached chats: $e');
+      return [];
     }
-    return [];
   }
 
   // Cache last sync timestamp

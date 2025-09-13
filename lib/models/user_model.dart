@@ -35,6 +35,20 @@ class UserModel {
     };
   }
 
+  // Convert UserModel to Map for JSON serialization (cache)
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'uid': uid,
+      'name': name,
+      'email': email,
+      'profileImageUrl': profileImageUrl,
+      'createdAt': createdAt.millisecondsSinceEpoch,
+      'isOnline': isOnline,
+      'lastSeen': lastSeen?.millisecondsSinceEpoch,
+      'fcmToken': fcmToken,
+    };
+  }
+
   // Create UserModel from Firestore document
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
@@ -49,10 +63,59 @@ class UserModel {
     );
   }
 
+  // Create UserModel from JSON Map (cache)
+  factory UserModel.fromJsonMap(Map<String, dynamic> map) {
+    return UserModel(
+      uid: map['uid'] ?? '',
+      name: map['name'] ?? '',
+      email: map['email'] ?? '',
+      profileImageUrl: map['profileImageUrl'],
+      createdAt: map['createdAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
+          : DateTime.now(),
+      isOnline: map['isOnline'] ?? false,
+      lastSeen: map['lastSeen'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['lastSeen'])
+          : null,
+      fcmToken: map['fcmToken'],
+    );
+  }
+
   // Create UserModel from Firestore DocumentSnapshot
   factory UserModel.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return UserModel.fromMap(data);
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('Document data is null');
+    }
+    
+    // Safe type casting for web compatibility
+    Map<String, dynamic> safeData;
+    try {
+      if (data is Map<String, dynamic>) {
+        safeData = data;
+      } else {
+        // Handle LegacyJavaScriptObject case - convert to Map first
+        final Map<dynamic, dynamic> rawMap = data as Map<dynamic, dynamic>;
+        safeData = <String, dynamic>{};
+        rawMap.forEach((key, value) {
+          safeData[key.toString()] = value;
+        });
+      }
+    } catch (e) {
+      // Fallback: try to extract data manually
+      safeData = {
+        'uid': doc.id,
+        'name': 'Unknown User',
+        'email': '',
+        'profileImageUrl': null,
+        'createdAt': Timestamp.now(),
+        'isOnline': false,
+        'lastSeen': null,
+        'fcmToken': null,
+      };
+    }
+    
+    return UserModel.fromMap(safeData);
   }
 
   // Create a copy of UserModel with updated fields

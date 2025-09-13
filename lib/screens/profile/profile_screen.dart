@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../widgets/common/profile_image_picker.dart';
 
@@ -9,33 +10,35 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<AuthProvider, ThemeProvider>(
+      builder: (context, authProvider, themeProvider, child) {
         final user = authProvider.currentUser;
+        final theme = themeProvider.currentTheme;
         
         if (user == null) {
-          return const CupertinoPageScaffold(
+          return CupertinoPageScaffold(
+            backgroundColor: theme.backgroundColor,
             child: Center(
-              child: Text('Not authenticated'),
+              child: Text('Not authenticated', style: TextStyle(color: theme.textPrimary)),
             ),
           );
         }
 
         return CupertinoPageScaffold(
-          backgroundColor: AppConstants.backgroundColor,
+          backgroundColor: theme.backgroundColor,
           navigationBar: CupertinoNavigationBar(
-            backgroundColor: AppConstants.backgroundColor,
+            backgroundColor: theme.backgroundColor,
             border: null,
-            middle: const Text(AppStrings.profile),
+            middle: Text(AppStrings.profile, style: TextStyle(color: theme.textPrimary)),
             trailing: CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () {
-                Navigator.of(context).pushNamed('/edit-profile');
+                Navigator.of(context, rootNavigator: true).pushNamed('/edit-profile');
               },
-              child: const Text(
+              child: Text(
                 'Edit',
                 style: TextStyle(
-                  color: AppConstants.primaryColor,
+                  color: theme.primaryColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -68,7 +71,7 @@ class ProfileScreen extends StatelessWidget {
                   Text(
                     user.name,
                     style: AppConstants.titleMedium.copyWith(
-                      color: CupertinoColors.label,
+                      color: theme.textPrimary,
                     ),
                   ),
                   
@@ -78,39 +81,44 @@ class ProfileScreen extends StatelessWidget {
                   Text(
                     user.email,
                     style: AppConstants.bodyMedium.copyWith(
-                      color: CupertinoColors.secondaryLabel,
+                      color: theme.textSecondary,
                     ),
                   ),
                   
                   const SizedBox(height: AppConstants.paddingXLarge),
                   
                   // Profile Options
-                  _buildProfileSection(context, [
+                  _buildProfileSection(context, theme, [
                     _ProfileOption(
                       icon: CupertinoIcons.person_circle,
                       title: AppStrings.editProfile,
-                      onTap: () => Navigator.of(context).pushNamed('/edit-profile'),
+                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/edit-profile'),
                     ),
                     _ProfileOption(
                       icon: CupertinoIcons.bell,
                       title: AppStrings.notifications,
-                      onTap: () => Navigator.of(context).pushNamed('/notifications'),
+                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/notifications'),
                     ),
                     _ProfileOption(
                       icon: CupertinoIcons.lock,
                       title: AppStrings.privacy,
-                      onTap: () => Navigator.of(context).pushNamed('/privacy'),
+                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/privacy'),
                     ),
                   ]),
                   
                   const SizedBox(height: AppConstants.paddingLarge),
                   
                   // App Options
-                  _buildProfileSection(context, [
+                  _buildProfileSection(context, theme, [
+                    _ProfileOption(
+                      icon: CupertinoIcons.paintbrush,
+                      title: 'Appearance',
+                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/theme-settings'),
+                    ),
                     _ProfileOption(
                       icon: CupertinoIcons.info_circle,
                       title: AppStrings.about,
-                      onTap: () => Navigator.of(context).pushNamed('/about'),
+                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/about'),
                     ),
                   ]),
                   
@@ -120,8 +128,8 @@ class ProfileScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: CupertinoButton(
-                      color: AppConstants.errorColor,
-                      onPressed: () => _showSignOutDialog(context, authProvider),
+                      color: theme.errorColor,
+                      onPressed: () => _showSignOutDialog(context, authProvider, theme),
                       child: const Text(
                         AppStrings.signOut,
                         style: TextStyle(
@@ -140,10 +148,10 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileSection(BuildContext context, List<_ProfileOption> options) {
+  Widget _buildProfileSection(BuildContext context, theme, List<_ProfileOption> options) {
     return Container(
       decoration: BoxDecoration(
-        color: AppConstants.surfaceColor,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
       ),
       child: Column(
@@ -161,7 +169,7 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     Icon(
                       option.icon,
-                      color: AppConstants.primaryColor,
+                      color: theme.primaryColor,
                       size: 24,
                     ),
                     const SizedBox(width: AppConstants.paddingMedium),
@@ -169,13 +177,13 @@ class ProfileScreen extends StatelessWidget {
                       child: Text(
                         option.title,
                         style: AppConstants.bodyLarge.copyWith(
-                          color: CupertinoColors.label,
+                          color: theme.textPrimary,
                         ),
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       CupertinoIcons.chevron_right,
-                      color: CupertinoColors.secondaryLabel,
+                      color: theme.textSecondary,
                       size: 16,
                     ),
                   ],
@@ -185,7 +193,7 @@ class ProfileScreen extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.only(left: 56),
                   height: 1,
-                  color: CupertinoColors.separator,
+                  color: theme.borderColor,
                 ),
             ],
           );
@@ -195,14 +203,15 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showErrorDialog(BuildContext context, String error) {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Error'),
-        content: Text(error),
+        title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+        content: Text(error, style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('OK'),
+            child: Text('OK', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -210,15 +219,15 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  void _showSignOutDialog(BuildContext context, AuthProvider authProvider) {
+  void _showSignOutDialog(BuildContext context, AuthProvider authProvider, theme) {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: Text('Sign Out', style: TextStyle(color: theme.textPrimary)),
+        content: Text('Are you sure you want to sign out?', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
           CupertinoDialogAction(

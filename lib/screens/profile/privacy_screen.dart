@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 
 class PrivacyScreen extends StatefulWidget {
@@ -18,16 +19,18 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   bool _showProfilePicture = true;
 
   void _showDeleteAccountDialog() {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
+        title: Text('Delete Account', style: TextStyle(color: theme.textPrimary)),
+        content: Text(
           'Are you sure you want to delete your account? This action cannot be undone. All your messages and data will be permanently deleted.',
+          style: TextStyle(color: theme.textSecondary),
         ),
         actions: [
           CupertinoDialogAction(
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
           CupertinoDialogAction(
@@ -44,14 +47,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   void _confirmDeleteAccount() {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Final Confirmation'),
-        content: const Text('Type "DELETE" to confirm account deletion.'),
+        title: Text('Final Confirmation', style: TextStyle(color: theme.textPrimary)),
+        content: Text('Type "DELETE" to confirm account deletion.', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
           CupertinoDialogAction(
@@ -68,14 +72,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   void _requestDataExport() {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Data Export Request'),
-        content: const Text('Your data export request has been submitted. You will receive an email with your data within 24 hours.'),
+        title: Text('Data Export Request', style: TextStyle(color: theme.textPrimary)),
+        content: Text('Your data export request has been submitted. You will receive an email with your data within 24 hours.', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('OK'),
+            child: Text('OK', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -84,14 +89,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   }
 
   void _showClearChatHistoryDialog() {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: const Text('Clear Chat History'),
-        content: const Text('Are you sure you want to clear all chat history? This action cannot be undone.'),
+        title: Text('Clear Chat History', style: TextStyle(color: theme.textPrimary)),
+        content: Text('Are you sure you want to clear all chat history? This action cannot be undone.', style: TextStyle(color: theme.textSecondary)),
         actions: [
           CupertinoDialogAction(
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: theme.primaryColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
           CupertinoDialogAction(
@@ -113,14 +119,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       // Clear all chat messages - this would need to be implemented in ChatProvider
       // For now, show a success message
       if (mounted) {
+        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
-            title: const Text('Success'),
-            content: const Text('Chat history has been cleared successfully.'),
+            title: Text('Success', style: TextStyle(color: theme.textPrimary)),
+            content: Text('Chat history has been cleared successfully.', style: TextStyle(color: theme.textSecondary)),
             actions: [
               CupertinoDialogAction(
-                child: const Text('OK'),
+                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -129,14 +136,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
-            title: const Text('Error'),
-            content: const Text('Failed to clear chat history. Please try again.'),
+            title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+            content: Text('Failed to clear chat history. Please try again.', style: TextStyle(color: theme.textSecondary)),
             actions: [
               CupertinoDialogAction(
-                child: const Text('OK'),
+                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -152,14 +160,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       // Note: Account deletion would need to be implemented in AuthProvider
       // For now, show a placeholder message
       if (mounted) {
+        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
-            title: const Text('Account Deletion'),
-            content: const Text('Account deletion request has been submitted. Please contact support for assistance.'),
+            title: Text('Account Deletion', style: TextStyle(color: theme.textPrimary)),
+            content: Text('Account deletion request has been submitted. Please contact support for assistance.', style: TextStyle(color: theme.textSecondary)),
             actions: [
               CupertinoDialogAction(
-                child: const Text('OK'),
+                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -168,14 +177,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
         showCupertinoDialog(
           context: context,
           builder: (context) => CupertinoAlertDialog(
-            title: const Text('Error'),
-            content: const Text('Failed to process account deletion. Please contact support.'),
+            title: Text('Error', style: TextStyle(color: theme.textPrimary)),
+            content: Text('Failed to process account deletion. Please contact support.', style: TextStyle(color: theme.textSecondary)),
             actions: [
               CupertinoDialogAction(
-                child: const Text('OK'),
+                child: Text('OK', style: TextStyle(color: theme.primaryColor)),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -187,20 +197,37 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Privacy'),
-      ),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
+        
+        return CupertinoPageScaffold(
+          backgroundColor: theme.backgroundColor,
+          navigationBar: CupertinoNavigationBar(
+            backgroundColor: theme.backgroundColor,
+            middle: Text(
+              'Privacy',
+              style: TextStyle(color: theme.textPrimary),
+            ),
+          ),
       child: SafeArea(
         child: ListView(
           children: [
             CupertinoFormSection.insetGrouped(
-              header: const Text('VISIBILITY'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'VISIBILITY',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Show Online Status'),
+                  prefix: Text(
+                    'Show Online Status',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _showOnlineStatus,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _showOnlineStatus = value;
@@ -209,9 +236,13 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Show Last Seen'),
+                  prefix: Text(
+                    'Show Last Seen',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _showLastSeen,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _showLastSeen = value;
@@ -220,9 +251,13 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Show Profile Picture'),
+                  prefix: Text(
+                    'Show Profile Picture',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _showProfilePicture,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _showProfilePicture = value;
@@ -234,12 +269,20 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             ),
             
             CupertinoFormSection.insetGrouped(
-              header: const Text('FRIEND REQUESTS'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'FRIEND REQUESTS',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Allow Friend Requests'),
+                  prefix: Text(
+                    'Allow Friend Requests',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoSwitch(
                     value: _allowFriendRequests,
+                    activeTrackColor: theme.primaryColor,
                     onChanged: (value) {
                       setState(() {
                         _allowFriendRequests = value;
@@ -251,21 +294,31 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             ),
             
             CupertinoFormSection.insetGrouped(
-              header: const Text('DATA & STORAGE'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'DATA & STORAGE',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Download My Data'),
+                  prefix: Text(
+                    'Download My Data',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => _requestDataExport(),
-                    child: const Text('Request'),
+                    child: Text('Request', style: TextStyle(color: theme.primaryColor)),
                   ),
                 ),
                 CupertinoFormRow(
-                  prefix: const Text('Clear Chat History'),
+                  prefix: Text(
+                    'Clear Chat History',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
-                    child: const Text('Clear All'),
+                    child: Text('Clear All', style: TextStyle(color: theme.primaryColor)),
                     onPressed: () => _showClearChatHistoryDialog(),
                   ),
                 ),
@@ -273,10 +326,17 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             ),
             
             CupertinoFormSection.insetGrouped(
-              header: const Text('ACCOUNT'),
+              backgroundColor: theme.cardColor,
+              header: Text(
+                'ACCOUNT',
+                style: TextStyle(color: theme.textSecondary),
+              ),
               children: [
                 CupertinoFormRow(
-                  prefix: const Text('Delete Account'),
+                  prefix: Text(
+                    'Delete Account',
+                    style: TextStyle(color: theme.textPrimary),
+                  ),
                   child: CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: _showDeleteAccountDialog,
@@ -296,7 +356,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
               child: Text(
                 'Your privacy is important to us. These settings help you control who can see your information and how your data is used.',
                 style: AppConstants.caption.copyWith(
-                  color: CupertinoColors.secondaryLabel,
+                  color: theme.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -304,6 +364,8 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           ],
         ),
       ),
+        );
+      },
     );
   }
 }

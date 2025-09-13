@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/chat_model.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 
@@ -20,8 +21,9 @@ class ChatListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ChatProvider>(
-      builder: (context, chatProvider, child) {
+    return Consumer2<ChatProvider, ThemeProvider>(
+      builder: (context, chatProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         final chatTitle = chatProvider.getChatTitle(chat, currentUserId);
         final chatImageUrl = chatProvider.getChatImageUrl(chat, currentUserId);
         final unreadCount = chat.getUnreadCount(currentUserId);
@@ -38,7 +40,7 @@ class ChatListItem extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
               decoration: BoxDecoration(
-                color: AppConstants.surfaceColor,
+                color: theme.cardColor,
                 borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
               ),
               child: Row(
@@ -46,7 +48,7 @@ class ChatListItem extends StatelessWidget {
                   // Profile Image
                   Stack(
                     children: [
-                      _buildProfileImage(chatImageUrl, chatTitle),
+                      _buildProfileImage(chatImageUrl, chatTitle, theme),
                       if (isOnline)
                         Positioned(
                           right: 0,
@@ -55,10 +57,10 @@ class ChatListItem extends StatelessWidget {
                             width: 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: AppConstants.successColor,
+                              color: theme.onlineColor,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: AppConstants.surfaceColor,
+                                color: theme.cardColor,
                                 width: 2,
                               ),
                             ),
@@ -83,7 +85,7 @@ class ChatListItem extends StatelessWidget {
                                   fontWeight: unreadCount > 0 
                                     ? FontWeight.w600 
                                     : FontWeight.normal,
-                                  color: CupertinoColors.label,
+                                  color: theme.textPrimary,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -94,8 +96,8 @@ class ChatListItem extends StatelessWidget {
                                 AppHelpers.formatTimestamp(chat.lastMessageTime!),
                                 style: AppConstants.caption.copyWith(
                                   color: unreadCount > 0 
-                                    ? AppConstants.primaryColor
-                                    : CupertinoColors.secondaryLabel,
+                                    ? theme.primaryColor
+                                    : theme.textSecondary,
                                   fontWeight: unreadCount > 0 
                                     ? FontWeight.w600 
                                     : FontWeight.normal,
@@ -113,8 +115,8 @@ class ChatListItem extends StatelessWidget {
                                 AppHelpers.getLastMessagePreview(chat.lastMessage),
                                 style: AppConstants.bodyMedium.copyWith(
                                   color: unreadCount > 0 
-                                    ? CupertinoColors.label
-                                    : CupertinoColors.secondaryLabel,
+                                    ? theme.textPrimary
+                                    : theme.textSecondary,
                                   fontWeight: unreadCount > 0 
                                     ? FontWeight.w500 
                                     : FontWeight.normal,
@@ -129,8 +131,8 @@ class ChatListItem extends StatelessWidget {
                                   horizontal: 8,
                                   vertical: 4,
                                 ),
-                                decoration: const BoxDecoration(
-                                  color: AppConstants.primaryColor,
+                                decoration: BoxDecoration(
+                                  color: theme.primaryColor,
                                   shape: BoxShape.circle,
                                 ),
                                 constraints: const BoxConstraints(
@@ -161,7 +163,7 @@ class ChatListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileImage(String? imageUrl, String title) {
+  Widget _buildProfileImage(String? imageUrl, String title, theme) {
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return ClipOval(
         child: CachedNetworkImage(
@@ -169,28 +171,28 @@ class ChatListItem extends StatelessWidget {
           width: AppConstants.profileImageSize,
           height: AppConstants.profileImageSize,
           fit: BoxFit.cover,
-          placeholder: (context, url) => _buildPlaceholder(title),
-          errorWidget: (context, url, error) => _buildPlaceholder(title),
+          placeholder: (context, url) => _buildPlaceholder(title, theme),
+          errorWidget: (context, url, error) => _buildPlaceholder(title, theme),
         ),
       );
     } else {
-      return _buildPlaceholder(title);
+      return _buildPlaceholder(title, theme);
     }
   }
 
-  Widget _buildPlaceholder(String title) {
+  Widget _buildPlaceholder(String title, theme) {
     return Container(
       width: AppConstants.profileImageSize,
       height: AppConstants.profileImageSize,
       decoration: BoxDecoration(
-        color: AppConstants.primaryColor.withOpacity(0.1),
+        color: theme.primaryColor.withOpacity(0.1),
         shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
           AppHelpers.getInitials(title),
           style: AppConstants.bodyMedium.copyWith(
-            color: AppConstants.primaryColor,
+            color: theme.primaryColor,
             fontWeight: FontWeight.w600,
           ),
         ),

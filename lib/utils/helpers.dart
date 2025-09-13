@@ -46,7 +46,8 @@ class AppHelpers {
   
   // Text Validation
   static bool isValidEmail(String email) {
-    return RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$').hasMatch(email);
+    final trimmed = email.trim();
+    return RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$').hasMatch(trimmed);
   }
 
   static bool isValidPassword(String password) {
@@ -58,10 +59,11 @@ class AppHelpers {
   }
   
   static String? validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
+    final v = value?.trim();
+    if (v == null || v.isEmpty) {
       return 'Email is required';
     }
-    if (!isValidEmail(value)) {
+    if (!isValidEmail(v)) {
       return 'Please enter a valid email address';
     }
     return null;

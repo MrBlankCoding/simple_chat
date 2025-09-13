@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/friend_provider.dart';
+import '../providers/theme_provider.dart';
+import '../themes/app_theme.dart';
 import '../utils/constants.dart';
 import 'chat/chat_list_screen.dart';
 import 'friends/friends_screen.dart';
@@ -65,8 +67,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ChatProvider, FriendProvider>(
-      builder: (context, chatProvider, friendProvider, child) {
+    return Consumer3<ChatProvider, FriendProvider, ThemeProvider>(
+      builder: (context, chatProvider, friendProvider, themeProvider, child) {
+        final theme = themeProvider.currentTheme;
         // Calculate badge counts
         final currentUserId = Provider.of<AuthProvider>(context, listen: false).currentUser?.uid;
         final chatBadgeCount = currentUserId != null 
@@ -76,15 +79,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
         return CupertinoTabScaffold(
           tabBar: CupertinoTabBar(
-            backgroundColor: AppConstants.surfaceColor,
-            activeColor: AppConstants.primaryColor,
-            inactiveColor: CupertinoColors.secondaryLabel,
+            backgroundColor: theme.surfaceColor,
+            activeColor: theme.primaryColor,
+            inactiveColor: theme.textSecondary,
             items: [
               BottomNavigationBarItem(
                 icon: _buildTabIcon(
                   CupertinoIcons.chat_bubble_2,
                   CupertinoIcons.chat_bubble_2_fill,
                   0,
+                  theme,
                   badgeCount: chatBadgeCount,
                 ),
                 label: AppStrings.chats,
@@ -94,6 +98,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   CupertinoIcons.person_2,
                   CupertinoIcons.person_2_fill,
                   1,
+                  theme,
                   badgeCount: friendBadgeCount,
                 ),
                 label: AppStrings.friends,
@@ -103,6 +108,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   CupertinoIcons.person,
                   CupertinoIcons.person_fill,
                   2,
+                  theme,
                 ),
                 label: AppStrings.profile,
               ),
@@ -124,7 +130,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildTabIcon(IconData icon, IconData activeIcon, int index, {int badgeCount = 0}) {
+  Widget _buildTabIcon(IconData icon, IconData activeIcon, int index, AppThemeData theme, {int badgeCount = 0}) {
     final isActive = _currentIndex == index;
     
     Widget iconWidget = Icon(
@@ -142,8 +148,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             top: -6,
             child: Container(
               padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: AppConstants.errorColor,
+              decoration: BoxDecoration(
+                color: theme.errorColor,
                 shape: BoxShape.circle,
               ),
               constraints: const BoxConstraints(

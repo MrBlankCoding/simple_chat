@@ -47,6 +47,22 @@ class Message {
     };
   }
 
+  // Convert Message to Map for JSON serialization (cache)
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'id': id,
+      'chatId': chatId,
+      'senderId': senderId,
+      'text': text,
+      'timestamp': timestamp.millisecondsSinceEpoch,
+      'readBy': readBy,
+      'type': type.toString().split('.').last,
+      'imageUrl': imageUrl,
+      'isEdited': isEdited,
+      'editedAt': editedAt?.millisecondsSinceEpoch,
+    };
+  }
+
   // Create Message from Firestore document
   factory Message.fromMap(Map<String, dynamic> map) {
     return Message(
@@ -66,10 +82,66 @@ class Message {
     );
   }
 
+  // Create Message from JSON Map (cache)
+  factory Message.fromJsonMap(Map<String, dynamic> map) {
+    return Message(
+      id: map['id'] ?? '',
+      chatId: map['chatId'] ?? '',
+      senderId: map['senderId'] ?? '',
+      text: map['text'] ?? '',
+      timestamp: map['timestamp'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['timestamp'])
+          : DateTime.now(),
+      readBy: List<String>.from(map['readBy'] ?? []),
+      type: MessageType.values.firstWhere(
+        (e) => e.toString().split('.').last == map['type'],
+        orElse: () => MessageType.text,
+      ),
+      imageUrl: map['imageUrl'],
+      isEdited: map['isEdited'] ?? false,
+      editedAt: map['editedAt'] != null 
+          ? DateTime.fromMillisecondsSinceEpoch(map['editedAt'])
+          : null,
+    );
+  }
+
   // Create Message from Firestore DocumentSnapshot
   factory Message.fromDocument(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return Message.fromMap(data);
+    final data = doc.data();
+    if (data == null) {
+      throw Exception('Document data is null');
+    }
+    
+    // Safe type casting for web compatibility
+    Map<String, dynamic> safeData;
+    try {
+      if (data is Map<String, dynamic>) {
+        safeData = data;
+      } else {
+        // Handle LegacyJavaScriptObject case - convert to Map first
+        final Map<dynamic, dynamic> rawMap = data as Map<dynamic, dynamic>;
+        safeData = <String, dynamic>{};
+        rawMap.forEach((key, value) {
+          safeData[key.toString()] = value;
+        });
+      }
+    } catch (e) {
+      // Fallback: try to extract data manually
+      safeData = {
+        'id': doc.id,
+        'chatId': '',
+        'senderId': '',
+        'text': '',
+        'timestamp': Timestamp.now(),
+        'readBy': <String>[],
+        'type': 'text',
+        'imageUrl': null,
+        'isEdited': false,
+        'editedAt': null,
+      };
+    }
+    
+    return Message.fromMap(safeData);
   }
 
   // Create a copy of Message with updated fields
