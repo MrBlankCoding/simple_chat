@@ -57,6 +57,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   children: {
                     0: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        '${AppStrings.allFriends} (${friendProvider.friendsCount})',
+                      ),
+                    ),
+                    1: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -85,12 +91,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
                         ],
                       ),
                     ),
-                    1: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        '${AppStrings.allFriends} (${friendProvider.friendsCount})',
-                      ),
-                    ),
                   },
                   groupValue: _selectedSegment,
                   onValueChanged: (value) {
@@ -104,8 +104,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
               // Content
               Expanded(
                 child: _selectedSegment == 0
-                    ? const FriendRequestsTab()
-                    : const FriendsListTab(),
+                    ? const FriendsListTab()
+                    : const FriendRequestsTab(),
               ),
             ],
           ),

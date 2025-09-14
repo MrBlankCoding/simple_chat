@@ -25,25 +25,6 @@ class ProfileScreen extends StatelessWidget {
         }
 
         return CupertinoPageScaffold(
-          backgroundColor: theme.backgroundColor,
-          navigationBar: CupertinoNavigationBar(
-            backgroundColor: theme.backgroundColor,
-            border: null,
-            middle: Text(AppStrings.profile, style: TextStyle(color: theme.textPrimary)),
-            trailing: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () {
-                Navigator.of(context, rootNavigator: true).pushNamed('/edit-profile');
-              },
-              child: Text(
-                'Edit',
-                style: TextStyle(
-                  color: theme.primaryColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
           child: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppConstants.paddingLarge),
@@ -114,11 +95,6 @@ class ProfileScreen extends StatelessWidget {
                       icon: CupertinoIcons.paintbrush,
                       title: 'Appearance',
                       onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/theme-settings'),
-                    ),
-                    _ProfileOption(
-                      icon: CupertinoIcons.info_circle,
-                      title: AppStrings.about,
-                      onTap: () => Navigator.of(context, rootNavigator: true).pushNamed('/about'),
                     ),
                   ]),
                   

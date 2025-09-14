@@ -30,42 +30,41 @@ class MessageOptionsModal extends StatelessWidget {
           top: Radius.circular(20),
         ),
       ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemGrey3,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: CupertinoColors.systemGrey3,
+              borderRadius: BorderRadius.circular(2),
             ),
-            
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Text(
-                    'Message Options',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+          ),
+          
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: Row(
+              children: [
+                const Text(
+                  'Message Options',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
                   ),
-                  const Spacer(),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: () => Navigator.pop(context),
-                    child: const Icon(CupertinoIcons.xmark_circle_fill),
-                  ),
-                ],
-              ),
+                ),
+                const Spacer(),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: () => Navigator.pop(context),
+                  child: const Icon(CupertinoIcons.xmark_circle_fill),
+                ),
+              ],
             ),
+          ),
             
             // Options
             Padding(
@@ -118,11 +117,13 @@ class MessageOptionsModal extends StatelessWidget {
               ),
             ),
             
-            const SizedBox(height: 16),
+            SafeArea(
+              top: false,
+              child: const SizedBox(height: 16),
+            ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildOptionTile({

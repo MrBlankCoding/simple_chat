@@ -13,6 +13,7 @@ class FriendsListTab extends StatelessWidget {
     return Consumer<FriendProvider>(
       builder: (context, friendProvider, child) {
         final friends = friendProvider.getFriendsList();
+        final onlineCount = friendProvider.getOnlineFriends().length;
 
         if (friends.isEmpty) {
           return _buildEmptyState(context);
@@ -20,10 +21,40 @@ class FriendsListTab extends StatelessWidget {
 
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: AppConstants.paddingMedium),
-          itemCount: friends.length,
+          itemCount: friends.length + 1,
           itemBuilder: (context, index) {
-            final friend = friends[index];
-            
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(
+                  top: AppConstants.paddingSmall,
+                  bottom: AppConstants.paddingMedium,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: CupertinoColors.activeGreen,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      onlineCount == 1
+                          ? '1 friend online'
+                          : '$onlineCount friends online',
+                      style: AppConstants.bodyMedium.copyWith(
+                        color: CupertinoColors.secondaryLabel,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final friend = friends[index - 1];
             return FriendListItem(
               user: friend,
               onTap: () => _startChat(context, friend.uid),

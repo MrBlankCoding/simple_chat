@@ -296,38 +296,6 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             CupertinoFormSection.insetGrouped(
               backgroundColor: theme.cardColor,
               header: Text(
-                'DATA & STORAGE',
-                style: TextStyle(color: theme.textSecondary),
-              ),
-              children: [
-                CupertinoFormRow(
-                  prefix: Text(
-                    'Download My Data',
-                    style: TextStyle(color: theme.textPrimary),
-                  ),
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: () => _requestDataExport(),
-                    child: Text('Request', style: TextStyle(color: theme.primaryColor)),
-                  ),
-                ),
-                CupertinoFormRow(
-                  prefix: Text(
-                    'Clear Chat History',
-                    style: TextStyle(color: theme.textPrimary),
-                  ),
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    child: Text('Clear All', style: TextStyle(color: theme.primaryColor)),
-                    onPressed: () => _showClearChatHistoryDialog(),
-                  ),
-                ),
-              ],
-            ),
-            
-            CupertinoFormSection.insetGrouped(
-              backgroundColor: theme.cardColor,
-              header: Text(
                 'ACCOUNT',
                 style: TextStyle(color: theme.textSecondary),
               ),

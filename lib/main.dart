@@ -19,7 +19,6 @@ import 'screens/friends/search_users_screen.dart';
 import 'screens/profile/edit_profile_screen.dart';
 import 'screens/profile/notifications_screen.dart';
 import 'screens/profile/privacy_screen.dart';
-import 'screens/profile/about_screen.dart';
 import 'screens/profile/theme_settings_screen.dart';
 import 'utils/constants.dart';
 
@@ -103,10 +102,6 @@ class SimpleChat extends StatelessWidget {
                 case '/privacy':
                   return CupertinoPageRoute(
                     builder: (context) => const PrivacyScreen(),
-                  );
-                case '/about':
-                  return CupertinoPageRoute(
-                    builder: (context) => const AboutScreen(),
                   );
                 case '/theme-settings':
                   return CupertinoPageRoute(

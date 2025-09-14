@@ -69,21 +69,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               children: [
                 CupertinoFormRow(
                   prefix: Text(
-                    'New Messages',
-                    style: TextStyle(color: theme.textPrimary),
-                  ),
-                  child: CupertinoSwitch(
-                    value: _messageNotifications,
-                    activeTrackColor: theme.primaryColor,
-                    onChanged: _pushNotifications ? (value) {
-                      setState(() {
-                        _messageNotifications = value;
-                      });
-                    } : null,
-                  ),
-                ),
-                CupertinoFormRow(
-                  prefix: Text(
                     'Friend Requests',
                     style: TextStyle(color: theme.textPrimary),
                   ),
