@@ -11,6 +11,7 @@ import '../../widgets/common/offline_banner.dart';
 import '../../services/connectivity_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
+import 'group_info_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -149,7 +150,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ? CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () {
-                      // TODO: Show group info
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => GroupInfoScreen(chatId: widget.chatId),
+                        ),
+                      );
                     },
                     child: const Icon(CupertinoIcons.info),
                   )

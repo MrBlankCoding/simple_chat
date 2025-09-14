@@ -232,6 +232,95 @@ class ChatService {
     }
   }
 
+  // Get a single chat by id
+  Future<Chat?> getChatById(String chatId) async {
+    try {
+      return await _firestoreService.getChatById(chatId);
+    } catch (e) {
+      throw Exception('Failed to get chat: ${e.toString()}');
+    }
+  }
+
+  // Update group info (admin only). Optionally upload a new image.
+  Future<void> updateGroupInfo(
+    String chatId, {
+    String? newGroupName,
+    XFile? newImageFile,
+  }) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      String? imageUrl;
+      if (newImageFile != null) {
+        imageUrl = await _uploadImage(newImageFile, 'group_images');
+      }
+
+      await _firestoreService.updateGroupInfo(
+        chatId,
+        requesterId: currentUserId,
+        groupName: newGroupName,
+        groupImageUrl: imageUrl,
+      );
+    } catch (e) {
+      throw Exception('Failed to update group info: ${e.toString()}');
+    }
+  }
+
+  // Remove a member from the group (admin only)
+  Future<void> removeGroupMember(String chatId, String memberUserId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+      await _firestoreService.removeGroupMember(chatId, memberUserId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to remove group member: ${e.toString()}');
+    }
+  }
+
+  // Add members to group (admin only)
+  Future<void> addGroupMembers(String chatId, List<String> userIds) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+      await _firestoreService.addGroupMembers(chatId, userIds, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to add members: ${e.toString()}');
+    }
+  }
+
+  // Leave group (non-admin only)
+  Future<void> leaveGroup(String chatId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+      await _firestoreService.leaveGroup(chatId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to leave group: ${e.toString()}');
+    }
+  }
+
+  // Transfer admin (admin only)
+  Future<void> transferGroupAdmin(String chatId, String newAdminUserId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+      await _firestoreService.transferGroupAdmin(chatId, newAdminUserId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to transfer admin: ${e.toString()}');
+    }
+  }
+
   // Delete message (for sender only)
   Future<void> deleteMessage(String messageId) async {
     try {

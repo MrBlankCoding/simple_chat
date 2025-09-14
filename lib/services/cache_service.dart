@@ -542,6 +542,36 @@ class CacheService {
     }
   }
 
+  // Retrieve cached user online status if not older than maxAge
+  Future<bool?> getCachedUserOnline(String userId, {Duration maxAge = const Duration(minutes: 5)}) async {
+    try {
+      await initialize();
+      final ts = _prefs!.getInt('cache_time_user_status_$userId');
+      if (ts == null) return null;
+      final age = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+      if (age > maxAge) return null;
+      return _prefs!.getBool('user_status_$userId');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Retrieve cached user last seen if associated status cache is still valid
+  Future<DateTime?> getCachedUserLastSeen(String userId, {Duration maxAge = const Duration(minutes: 5)}) async {
+    try {
+      await initialize();
+      final ts = _prefs!.getInt('cache_time_user_status_$userId');
+      if (ts == null) return null;
+      final age = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+      if (age > maxAge) return null;
+      final lastSeenMs = _prefs!.getInt('user_last_seen_$userId');
+      if (lastSeenMs == null) return null;
+      return DateTime.fromMillisecondsSinceEpoch(lastSeenMs);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Retrieve last message timestamp tracked during cacheMessages
   Future<DateTime?> getLastMessageTime(String chatId) async {
     try {

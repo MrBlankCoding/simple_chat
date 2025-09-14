@@ -204,6 +204,7 @@ class MessageOptionsModal extends StatelessWidget {
       builder: (context) => ReactionPickerModal(
         message: message,
         chatProvider: chatProvider,
+        currentUserId: currentUserId,
       ),
     );
   }
@@ -223,11 +224,13 @@ class MessageOptionsModal extends StatelessWidget {
 class ReactionPickerModal extends StatelessWidget {
   final Message message;
   final ChatProvider chatProvider;
+  final String currentUserId;
 
   const ReactionPickerModal({
     super.key,
     required this.message,
     required this.chatProvider,
+    required this.currentUserId,
   });
 
   @override
@@ -292,12 +295,16 @@ class ReactionPickerModal extends StatelessWidget {
                 itemCount: reactions.length,
                 itemBuilder: (context, index) {
                   final emoji = reactions[index];
-                  final hasReacted = message.reactions[emoji]?.isNotEmpty ?? false;
+                  final hasReacted = (message.reactions[emoji]?.contains(currentUserId)) ?? false;
                   
                   return CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () {
-                      chatProvider.addReaction(message.id, emoji);
+                      if (hasReacted) {
+                        chatProvider.removeReaction(message.id, emoji);
+                      } else {
+                        chatProvider.addReaction(message.id, emoji);
+                      }
                       Navigator.pop(context);
                     },
                     child: Container(

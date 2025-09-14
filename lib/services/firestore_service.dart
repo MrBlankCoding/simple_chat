@@ -382,6 +382,167 @@ class FirestoreService {
             .toList());
   }
 
+  // Fetch a single chat by id
+  Future<Chat?> getChatById(String chatId) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.chatsCollection)
+          .doc(chatId)
+          .get();
+      if (!doc.exists) return null;
+      return Chat.fromDocument(doc);
+    } catch (e) {
+      throw Exception('Failed to get chat: ${e.toString()}');
+    }
+  }
+
+  // Update group info (admin only)
+  Future<void> updateGroupInfo(
+    String chatId, {
+    required String requesterId,
+    String? groupName,
+    String? groupImageUrl,
+  }) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) {
+        throw Exception('Chat not found');
+      }
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.isGroup) {
+        throw Exception('Not a group chat');
+      }
+      if (chat.createdBy != requesterId) {
+        throw Exception('Only the admin can update group info');
+      }
+
+      final Map<String, dynamic> updates = {};
+      if (groupName != null) updates['groupName'] = groupName.trim();
+      if (groupImageUrl != null) updates['groupImageUrl'] = groupImageUrl.trim();
+      if (updates.isEmpty) return;
+
+      await chatRef.update(updates);
+    } catch (e) {
+      throw Exception('Failed to update group info: ${e.toString()}');
+    }
+  }
+
+  // Remove a member from group (admin only)
+  Future<void> removeGroupMember(
+    String chatId,
+    String memberUserId,
+    String requesterId,
+  ) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) {
+        throw Exception('Chat not found');
+      }
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.isGroup) {
+        throw Exception('Not a group chat');
+      }
+      if (chat.createdBy != requesterId) {
+        throw Exception('Only the admin can remove members');
+      }
+      if (!chat.participants.contains(memberUserId)) {
+        throw Exception('User is not a member of this group');
+      }
+      if (memberUserId == chat.createdBy) {
+        throw Exception('Admin cannot be removed');
+      }
+
+      final updatedParticipants = List<String>.from(chat.participants)..remove(memberUserId);
+      final updatedUnread = Map<String, int>.from(chat.unreadCount)..remove(memberUserId);
+
+      await chatRef.update({
+        'participants': updatedParticipants,
+        'unreadCount': updatedUnread,
+      });
+    } catch (e) {
+      throw Exception('Failed to remove group member: ${e.toString()}');
+    }
+  }
+
+  // Add members to a group (admin only)
+  Future<void> addGroupMembers(
+    String chatId,
+    List<String> newMemberUserIds,
+    String requesterId,
+  ) async {
+    try {
+      if (newMemberUserIds.isEmpty) return;
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) throw Exception('Chat not found');
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.isGroup) throw Exception('Not a group chat');
+      if (chat.createdBy != requesterId) throw Exception('Only the admin can add members');
+
+      final updatedParticipants = {...chat.participants, ...newMemberUserIds}.toList();
+      final updatedUnread = Map<String, int>.from(chat.unreadCount);
+      for (final uid in newMemberUserIds) {
+        updatedUnread.putIfAbsent(uid, () => 0);
+      }
+
+      await chatRef.update({
+        'participants': updatedParticipants,
+        'unreadCount': updatedUnread,
+      });
+    } catch (e) {
+      throw Exception('Failed to add members: ${e.toString()}');
+    }
+  }
+
+  // Leave group (non-admin only)
+  Future<void> leaveGroup(String chatId, String userId) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) throw Exception('Chat not found');
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.isGroup) throw Exception('Not a group chat');
+      if (!chat.participants.contains(userId)) throw Exception('You are not a member of this group');
+      if (chat.createdBy == userId) {
+        throw Exception('Admin cannot leave group. Transfer admin first.');
+      }
+
+      final updatedParticipants = List<String>.from(chat.participants)..remove(userId);
+      final updatedUnread = Map<String, int>.from(chat.unreadCount)..remove(userId);
+
+      await chatRef.update({
+        'participants': updatedParticipants,
+        'unreadCount': updatedUnread,
+      });
+    } catch (e) {
+      throw Exception('Failed to leave group: ${e.toString()}');
+    }
+  }
+
+  // Transfer group admin to another member (admin only)
+  Future<void> transferGroupAdmin(
+    String chatId,
+    String newAdminUserId,
+    String requesterId,
+  ) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) throw Exception('Chat not found');
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.isGroup) throw Exception('Not a group chat');
+      if (chat.createdBy != requesterId) throw Exception('Only the admin can transfer ownership');
+      if (!chat.participants.contains(newAdminUserId)) throw Exception('New admin must be a group member');
+      if (newAdminUserId == requesterId) return; // no-op
+
+      await chatRef.update({'createdBy': newAdminUserId});
+    } catch (e) {
+      throw Exception('Failed to transfer admin: ${e.toString()}');
+    }
+  }
+
   // Message Operations
   Future<void> sendMessage({
     required String chatId,

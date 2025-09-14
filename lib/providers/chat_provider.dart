@@ -177,7 +177,16 @@ class ChatProvider extends ChangeNotifier {
       // Try to load from cache first
       final cachedUser = await _cacheService.getCachedUser(userId);
       if (cachedUser != null) {
-        _users[userId] = cachedUser;
+        // Apply short-lived cached presence if available
+        bool? cachedOnline = await _cacheService.getCachedUserOnline(userId);
+        DateTime? cachedLastSeen = await _cacheService.getCachedUserLastSeen(userId);
+        final withPresence = (cachedOnline != null || cachedLastSeen != null)
+            ? cachedUser.copyWith(
+                isOnline: cachedOnline ?? cachedUser.isOnline,
+                lastSeen: cachedLastSeen ?? cachedUser.lastSeen,
+              )
+            : cachedUser;
+        _users[userId] = withPresence;
         notifyListeners();
         
         // Load fresh data in background if cache is old
@@ -185,7 +194,7 @@ class ChatProvider extends ChangeNotifier {
         if (lastSync == null || DateTime.now().difference(lastSync).inHours > 1) {
           _loadUserFromServer(userId);
         }
-        return cachedUser;
+        return withPresence;
       } else {
         // No cache, load from server
         return await _loadUserFromServer(userId);
@@ -860,8 +869,17 @@ class ChatProvider extends ChangeNotifier {
       for (final userId in userIds) {
         final cachedUser = await _cacheService.getCachedUser(userId);
         if (cachedUser != null) {
-          cachedUsers[userId] = cachedUser;
-          _users[userId] = cachedUser;
+          // Apply presence overrides from short-lived status cache
+          bool? cachedOnline = await _cacheService.getCachedUserOnline(userId);
+          DateTime? cachedLastSeen = await _cacheService.getCachedUserLastSeen(userId);
+          final withPresence = (cachedOnline != null || cachedLastSeen != null)
+              ? cachedUser.copyWith(
+                  isOnline: cachedOnline ?? cachedUser.isOnline,
+                  lastSeen: cachedLastSeen ?? cachedUser.lastSeen,
+                )
+              : cachedUser;
+          cachedUsers[userId] = withPresence;
+          _users[userId] = withPresence;
         } else {
           usersToFetch.add(userId);
         }
@@ -886,6 +904,169 @@ class ChatProvider extends ChangeNotifier {
       _errorService.logError('Failed to batch load users', error: e);
     }
   }
+
+  // Group management: refresh a single chat from server
+  Future<void> refreshChat(String chatId) async {
+    try {
+      final chat = await _chatService.getChatById(chatId);
+      if (chat != null) {
+        final idx = _chats.indexWhere((c) => c.id == chatId);
+        if (idx != -1) {
+          _chats[idx] = chat;
+        } else {
+          _chats.add(chat);
+        }
+        // Preload users for participants
+        await preloadUsers(chat.participants);
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorService.logError('Failed to refresh chat $chatId', error: e);
+    }
+  }
+
+  // Group management: update group name/image (admin only)
+  Future<void> updateGroupInfo(
+    String chatId, {
+    String? newGroupName,
+    dynamic newImageFile, // XFile? but keep dynamic to avoid import cycle here
+  }) async {
+    try {
+      // Optimistically update local state
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      String? oldName;
+      String? oldImage;
+      if (idx != -1) {
+        final chat = _chats[idx];
+        oldName = chat.groupName;
+        oldImage = chat.groupImageUrl;
+        _chats[idx] = chat.copyWith(
+          groupName: newGroupName ?? chat.groupName,
+          groupImageUrl: newImageFile != null ? chat.groupImageUrl : chat.groupImageUrl,
+        );
+        notifyListeners();
+      }
+
+      await _chatService.updateGroupInfo(
+        chatId,
+        newGroupName: newGroupName,
+        newImageFile: newImageFile,
+      );
+
+      // Refresh from server to ensure consistency (e.g., receive image URL)
+      await refreshChat(chatId);
+      _clearError();
+    } catch (e) {
+      // Revert optimistic update if needed
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      if (idx != -1) {
+        // Fetch latest from server to revert
+        await refreshChat(chatId);
+      }
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to update group info', error: e);
+    }
+  }
+
+  // Group management: remove member (admin only)
+  Future<void> removeGroupMember(String chatId, String memberUserId) async {
+    try {
+      // Optimistically update chat participants locally
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      if (idx != -1) {
+        final chat = _chats[idx];
+        if (chat.participants.contains(memberUserId)) {
+          final updatedParticipants = List<String>.from(chat.participants)..remove(memberUserId);
+          final updatedUnread = Map<String, int>.from(chat.unreadCount)..remove(memberUserId);
+          _chats[idx] = chat.copyWith(participants: updatedParticipants, unreadCount: updatedUnread);
+          notifyListeners();
+        }
+      }
+
+      await _chatService.removeGroupMember(chatId, memberUserId);
+
+      // Ensure consistency
+      await refreshChat(chatId);
+      _clearError();
+    } catch (e) {
+      // Revert via refresh
+      await refreshChat(chatId);
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to remove group member', error: e);
+    }
+  }
+
+  // Group management: add members (admin only)
+  Future<void> addGroupMembers(String chatId, List<String> userIds) async {
+    if (userIds.isEmpty) return;
+    try {
+      // Optimistic: append unique members
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      if (idx != -1) {
+        final chat = _chats[idx];
+        final updatedParticipants = {...chat.participants, ...userIds}.toList();
+        _chats[idx] = chat.copyWith(participants: updatedParticipants);
+        notifyListeners();
+      }
+
+      await _chatService.addGroupMembers(chatId, userIds);
+      await refreshChat(chatId);
+      _clearError();
+    } catch (e) {
+      await refreshChat(chatId);
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to add group members', error: e);
+    }
+  }
+
+  // Group management: leave group (non-admin)
+  Future<void> leaveGroup(String chatId) async {
+    try {
+      final uid = currentUserId;
+      if (uid == null) return;
+
+      // Optimistic: remove current user
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      if (idx != -1) {
+        final chat = _chats[idx];
+        final updatedParticipants = List<String>.from(chat.participants)..remove(uid);
+        final updatedUnread = Map<String, int>.from(chat.unreadCount)..remove(uid);
+        _chats[idx] = chat.copyWith(participants: updatedParticipants, unreadCount: updatedUnread);
+        notifyListeners();
+      }
+
+      await _chatService.leaveGroup(chatId);
+
+      // Remove chat locally since user is no longer participant
+      _chats.removeWhere((c) => c.id == chatId);
+      _chatMessages.remove(chatId);
+      unsubscribeFromChat(chatId);
+      notifyListeners();
+    } catch (e) {
+      await refreshChat(chatId);
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to leave group', error: e);
+    }
+  }
+
+  // Group management: transfer admin (admin only)
+  Future<void> transferGroupAdmin(String chatId, String newAdminUserId) async {
+    try {
+      await _chatService.transferGroupAdmin(chatId, newAdminUserId);
+      await refreshChat(chatId);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to transfer admin', error: e);
+    }
+  }
+
+  // Expose users map for UI selection helpers
+  Map<String, UserModel> get usersMap => _users;
+
+  // Helpers
+  String? get currentUserId => _chatService.currentUserId;
+  bool isAdmin(Chat chat) => currentUserId != null && chat.createdBy == currentUserId;
 
   @override
   void dispose() {
