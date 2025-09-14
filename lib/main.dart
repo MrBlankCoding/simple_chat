@@ -7,6 +7,7 @@ import 'providers/chat_provider.dart';
 import 'providers/friend_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/notification_service.dart';
+import 'services/connectivity_service.dart';
 import 'screens/auth/welcome_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
@@ -35,6 +36,13 @@ void main() async {
     print('Failed to initialize notifications: $e');
   }
   
+  // Initialize connectivity service
+  try {
+    await ConnectivityService().initialize();
+  } catch (e) {
+    print('Failed to initialize connectivity service: $e');
+  }
+  
   runApp(const SimpleChat());
 }
 
@@ -49,6 +57,7 @@ class SimpleChat extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => FriendProvider()),
+        ChangeNotifierProvider(create: (_) => ConnectivityService()),
       ],
       child: Consumer2<AuthProvider, ThemeProvider>(
         builder: (context, authProvider, themeProvider, child) {

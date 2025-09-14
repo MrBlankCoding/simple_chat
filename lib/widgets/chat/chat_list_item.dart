@@ -34,9 +34,9 @@ class ChatListItem extends StatelessWidget {
             horizontal: AppConstants.paddingMedium,
             vertical: AppConstants.paddingSmall / 2,
           ),
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: onTap,
+          child: GestureDetector(
+            onTap: onTap,
+            onLongPress: () => _showChatOptions(context, chatProvider),
             child: Container(
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
               decoration: BoxDecoration(
@@ -78,6 +78,15 @@ class ChatListItem extends StatelessWidget {
                       children: [
                         Row(
                           children: [
+                            // Pin indicator
+                            if (chat.isPinnedBy(currentUserId)) ...[
+                              Icon(
+                                CupertinoIcons.pin_fill,
+                                size: 16,
+                                color: theme.primaryColor,
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             Expanded(
                               child: Text(
                                 chatTitle,
@@ -207,5 +216,92 @@ class ChatListItem extends StatelessWidget {
     if (otherUserId == null) return false;
     
     return chatProvider.isUserOnline(otherUserId);
+  }
+
+  void _showChatOptions(BuildContext context, ChatProvider chatProvider) {
+    final unreadCount = chat.getUnreadCount(currentUserId);
+    final isPinned = chat.isPinnedBy(currentUserId);
+    
+    showCupertinoModalPopup(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          // Pin/Unpin option
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              chatProvider.pinChat(chat.id);
+            },
+            child: Row(
+              children: [
+                Icon(isPinned ? CupertinoIcons.pin_slash : CupertinoIcons.pin),
+                const SizedBox(width: 12),
+                Text(isPinned ? 'Unpin Chat' : 'Pin Chat'),
+              ],
+            ),
+          ),
+          
+          // Mark as read option (only if there are unread messages)
+          if (unreadCount > 0)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                chatProvider.markChatAsRead(chat.id);
+              },
+              child: const Row(
+                children: [
+                  Icon(CupertinoIcons.checkmark_circle),
+                  SizedBox(width: 12),
+                  Text('Mark as Read'),
+                ],
+              ),
+            ),
+          
+          // Delete chat option
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              _showDeleteConfirmation(context, chatProvider);
+            },
+            isDestructiveAction: true,
+            child: const Row(
+              children: [
+                Icon(CupertinoIcons.trash),
+                SizedBox(width: 12),
+                Text('Delete Chat'),
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context, ChatProvider chatProvider) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Delete Chat'),
+        content: const Text('Are you sure you want to delete this chat? This action cannot be undone.'),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            child: const Text('Delete'),
+            onPressed: () {
+              chatProvider.deleteChat(chat.id);
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+    );
   }
 }

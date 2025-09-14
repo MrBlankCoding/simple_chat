@@ -65,6 +65,9 @@ dependencies:
   
   # URL launcher for external links
   url_launcher: ^6.3.0
+  
+  # Connectivity
+  connectivity_plus: ^6.0.5
 
 dev_dependencies:
   flutter_test:

@@ -12,6 +12,8 @@ class Chat {
   final String? groupImageUrl;
   final DateTime createdAt;
   final String createdBy;
+  final Map<String, bool> pinnedBy;
+  final bool isDeleted;
 
   Chat({
     required this.id,
@@ -25,6 +27,8 @@ class Chat {
     this.groupImageUrl,
     required this.createdAt,
     required this.createdBy,
+    this.pinnedBy = const {},
+    this.isDeleted = false,
   });
 
   // Convert Chat to Map for Firestore
@@ -41,6 +45,8 @@ class Chat {
       'groupImageUrl': groupImageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
       'createdBy': createdBy,
+      'pinnedBy': pinnedBy,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -58,6 +64,8 @@ class Chat {
       'groupImageUrl': groupImageUrl,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'createdBy': createdBy,
+      'pinnedBy': pinnedBy,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -75,6 +83,8 @@ class Chat {
       groupImageUrl: map['groupImageUrl'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       createdBy: map['createdBy'] ?? '',
+      pinnedBy: Map<String, bool>.from(map['pinnedBy'] ?? {}),
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -96,6 +106,8 @@ class Chat {
           ? DateTime.fromMillisecondsSinceEpoch(map['createdAt'])
           : DateTime.now(),
       createdBy: map['createdBy'] ?? '',
+      pinnedBy: Map<String, bool>.from(map['pinnedBy'] ?? {}),
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -133,6 +145,8 @@ class Chat {
         'groupImageUrl': null,
         'createdAt': Timestamp.now(),
         'createdBy': '',
+        'pinnedBy': <String, bool>{},
+        'isDeleted': false,
       };
     }
     
@@ -152,6 +166,8 @@ class Chat {
     String? groupImageUrl,
     DateTime? createdAt,
     String? createdBy,
+    Map<String, bool>? pinnedBy,
+    bool? isDeleted,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -165,6 +181,8 @@ class Chat {
       groupImageUrl: groupImageUrl ?? this.groupImageUrl,
       createdAt: createdAt ?? this.createdAt,
       createdBy: createdBy ?? this.createdBy,
+      pinnedBy: pinnedBy ?? this.pinnedBy,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -211,9 +229,31 @@ class Chat {
     }
   }
 
+  // Check if chat is pinned by user
+  bool isPinnedBy(String userId) {
+    return pinnedBy[userId] ?? false;
+  }
+
+  // Pin/unpin chat for user
+  Chat togglePin(String userId) {
+    final updatedPinnedBy = Map<String, bool>.from(pinnedBy);
+    updatedPinnedBy[userId] = !(pinnedBy[userId] ?? false);
+    return copyWith(pinnedBy: updatedPinnedBy);
+  }
+
+  // Mark chat as read for user
+  Chat markAsRead(String userId) {
+    return resetUnreadCount(userId);
+  }
+
+  // Check if chat can be deleted by user
+  bool canDelete(String userId) {
+    return !isDeleted && (createdBy == userId || participants.contains(userId));
+  }
+
   @override
   String toString() {
-    return 'Chat(id: $id, participants: $participants, isGroup: $isGroup, groupName: $groupName)';
+    return 'Chat(id: $id, participants: $participants, isGroup: $isGroup, groupName: $groupName, isDeleted: $isDeleted)';
   }
 
   @override

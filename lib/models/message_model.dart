@@ -17,6 +17,11 @@ class Message {
   final String? imageUrl;
   final bool isEdited;
   final DateTime? editedAt;
+  final Map<String, List<String>> reactions;
+  final String? replyToMessageId;
+  final String? replyToText;
+  final String? replyToSenderId;
+  final bool isDeleted;
 
   Message({
     required this.id,
@@ -29,6 +34,11 @@ class Message {
     this.imageUrl,
     this.isEdited = false,
     this.editedAt,
+    this.reactions = const {},
+    this.replyToMessageId,
+    this.replyToText,
+    this.replyToSenderId,
+    this.isDeleted = false,
   });
 
   // Convert Message to Map for Firestore
@@ -44,6 +54,11 @@ class Message {
       'imageUrl': imageUrl,
       'isEdited': isEdited,
       'editedAt': editedAt != null ? Timestamp.fromDate(editedAt!) : null,
+      'reactions': reactions,
+      'replyToMessageId': replyToMessageId,
+      'replyToText': replyToText,
+      'replyToSenderId': replyToSenderId,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -60,6 +75,11 @@ class Message {
       'imageUrl': imageUrl,
       'isEdited': isEdited,
       'editedAt': editedAt?.millisecondsSinceEpoch,
+      'reactions': reactions,
+      'replyToMessageId': replyToMessageId,
+      'replyToText': replyToText,
+      'replyToSenderId': replyToSenderId,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -79,6 +99,15 @@ class Message {
       imageUrl: map['imageUrl'],
       isEdited: map['isEdited'] ?? false,
       editedAt: (map['editedAt'] as Timestamp?)?.toDate(),
+      reactions: Map<String, List<String>>.from(
+        (map['reactions'] ?? {}).map(
+          (key, value) => MapEntry(key.toString(), List<String>.from(value ?? [])),
+        ),
+      ),
+      replyToMessageId: map['replyToMessageId'],
+      replyToText: map['replyToText'],
+      replyToSenderId: map['replyToSenderId'],
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -102,6 +131,15 @@ class Message {
       editedAt: map['editedAt'] != null 
           ? DateTime.fromMillisecondsSinceEpoch(map['editedAt'])
           : null,
+      reactions: Map<String, List<String>>.from(
+        (map['reactions'] ?? {}).map(
+          (key, value) => MapEntry(key.toString(), List<String>.from(value ?? [])),
+        ),
+      ),
+      replyToMessageId: map['replyToMessageId'],
+      replyToText: map['replyToText'],
+      replyToSenderId: map['replyToSenderId'],
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -138,6 +176,11 @@ class Message {
         'imageUrl': null,
         'isEdited': false,
         'editedAt': null,
+        'reactions': <String, List<String>>{},
+        'replyToMessageId': null,
+        'replyToText': null,
+        'replyToSenderId': null,
+        'isDeleted': false,
       };
     }
     
@@ -156,6 +199,11 @@ class Message {
     String? imageUrl,
     bool? isEdited,
     DateTime? editedAt,
+    Map<String, List<String>>? reactions,
+    String? replyToMessageId,
+    String? replyToText,
+    String? replyToSenderId,
+    bool? isDeleted,
   }) {
     return Message(
       id: id ?? this.id,
@@ -168,6 +216,11 @@ class Message {
       imageUrl: imageUrl ?? this.imageUrl,
       isEdited: isEdited ?? this.isEdited,
       editedAt: editedAt ?? this.editedAt,
+      reactions: reactions ?? this.reactions,
+      replyToMessageId: replyToMessageId ?? this.replyToMessageId,
+      replyToText: replyToText ?? this.replyToText,
+      replyToSenderId: replyToSenderId ?? this.replyToSenderId,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -189,9 +242,59 @@ class Message {
     return senderId == currentUserId;
   }
 
+  // Add reaction to message
+  Message addReaction(String emoji, String userId) {
+    final updatedReactions = Map<String, List<String>>.from(reactions);
+    if (updatedReactions.containsKey(emoji)) {
+      if (!updatedReactions[emoji]!.contains(userId)) {
+        updatedReactions[emoji] = [...updatedReactions[emoji]!, userId];
+      }
+    } else {
+      updatedReactions[emoji] = [userId];
+    }
+    return copyWith(reactions: updatedReactions);
+  }
+
+  // Remove reaction from message
+  Message removeReaction(String emoji, String userId) {
+    final updatedReactions = Map<String, List<String>>.from(reactions);
+    if (updatedReactions.containsKey(emoji)) {
+      updatedReactions[emoji]!.remove(userId);
+      if (updatedReactions[emoji]!.isEmpty) {
+        updatedReactions.remove(emoji);
+      }
+    }
+    return copyWith(reactions: updatedReactions);
+  }
+
+  // Check if user has reacted with specific emoji
+  bool hasUserReacted(String emoji, String userId) {
+    return reactions[emoji]?.contains(userId) ?? false;
+  }
+
+  // Get total reaction count for emoji
+  int getReactionCount(String emoji) {
+    return reactions[emoji]?.length ?? 0;
+  }
+
+  // Check if message is a reply
+  bool get isReply => replyToMessageId != null;
+
+  // Check if message can be edited (only by sender and within time limit)
+  bool canEdit(String currentUserId) {
+    if (senderId != currentUserId || isDeleted) return false;
+    final timeDiff = DateTime.now().difference(timestamp);
+    return timeDiff.inMinutes <= 15; // 15 minute edit window
+  }
+
+  // Check if message can be deleted (only by sender)
+  bool canDelete(String currentUserId) {
+    return senderId == currentUserId && !isDeleted;
+  }
+
   @override
   String toString() {
-    return 'Message(id: $id, senderId: $senderId, text: $text, type: $type)';
+    return 'Message(id: $id, senderId: $senderId, text: $text, type: $type, isDeleted: $isDeleted)';
   }
 
   @override

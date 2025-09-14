@@ -7,6 +7,8 @@ import '../../models/message_model.dart';
 import '../../models/chat_model.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
+import '../../widgets/common/offline_banner.dart';
+import '../../services/connectivity_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 
@@ -29,6 +31,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Timer? _typingTimer;
   List<Message> _previousMessages = [];
   bool _isDisposed = false;
+  Message? _replyingToMessage;
+  bool _isLoadingMoreMessages = false;
 
   // Getter for _chat to access the current chat
   Chat? get _chat => _currentChat;
@@ -36,6 +40,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
     });
@@ -45,9 +50,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     _isDisposed = true;
     _typingTimer?.cancel();
-    _scrollController.dispose();
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    chatProvider.unsubscribeFromChat(widget.chatId);
+    _typingTimer = null;
+    
+    // Safely dispose scroll controller
+    _scrollController.removeListener(_onScroll);
+    if (_scrollController.hasClients) {
+      _scrollController.dispose();
+    }
+    
+    // Safely unsubscribe from chat
+    try {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      chatProvider.unsubscribeFromChat(widget.chatId);
+    } catch (e) {
+      // Ignore disposal errors
+    }
+    
+    _messageController.dispose();
     super.dispose();
   }
 
@@ -101,9 +120,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
 
         final messages = chatProvider.getChatMessages(widget.chatId);
-        final chatTitle = _chat != null 
-          ? chatProvider.getChatTitle(_chat!, currentUser.uid)
-          : 'Chat';
         
         // Auto-scroll when new messages arrive (only if not disposed)
         if (!_isDisposed && messages.length > _previousMessages.length) {
@@ -115,25 +131,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         }
         _previousMessages = List.from(messages);
 
-        return CupertinoPageScaffold(
-            backgroundColor: AppConstants.backgroundColor,
-            navigationBar: CupertinoNavigationBar(
+        return Consumer<ConnectivityService>(
+          builder: (context, connectivityService, child) {
+            return CupertinoPageScaffold(
+              backgroundColor: AppConstants.backgroundColor,
+              navigationBar: CupertinoNavigationBar(
               backgroundColor: AppConstants.backgroundColor,
               border: null,
-              middle: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    chatTitle,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (_chat != null && !_chat!.isGroup)
-                    _buildOnlineStatus(chatProvider, currentUser.uid),
-                ],
-              ),
+              middle: _buildChatHeader(chatProvider, currentUser.uid),
               leading: CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: () => Navigator.of(context).pop(),
@@ -149,22 +154,117 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   )
                 : null,
             ),
-            child: Column(
-              children: [
-                // Messages List
-                Expanded(
-                  child: _buildMessagesList(messages, currentUser.uid),
-                ),
-                
-                // Message Input
-                MessageInput(
-                  onSendMessage: (text) => _sendMessage(chatProvider, text),
-                  onSendImage: () => _sendImage(chatProvider),
-                ),
-              ],
-            ),
+              child: Column(
+                children: [
+                  // Offline banner
+                  OfflineBanner(
+                    isOffline: connectivityService.isOffline,
+                    onRetry: () => _retryConnection(chatProvider),
+                  ),
+                  
+                  // Messages List
+                  Expanded(
+                    child: _buildMessagesList(messages, currentUser.uid),
+                  ),
+                  
+                  // Reply preview
+                  if (_replyingToMessage != null) _buildReplyPreview(),
+                  
+                  // Message Input
+                  MessageInput(
+                    onSendMessage: (text) => _sendMessage(chatProvider, text),
+                    onSendImage: () => _sendImage(chatProvider),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildChatHeader(ChatProvider chatProvider, String currentUserId) {
+    if (_chat == null) {
+      return const Text(
+        'Chat',
+        style: TextStyle(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+
+    final chatTitle = chatProvider.getChatTitle(_chat!, currentUserId);
+    final chatImageUrl = chatProvider.getChatImageUrl(_chat!, currentUserId);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Profile photo
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppConstants.primaryColor.withOpacity(0.1),
+          ),
+          child: chatImageUrl != null && chatImageUrl.isNotEmpty
+              ? ClipOval(
+                  child: Image.network(
+                    chatImageUrl,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _buildDefaultAvatar(chatTitle);
+                    },
+                  ),
+                )
+              : _buildDefaultAvatar(chatTitle),
+        ),
+        const SizedBox(width: 8),
+        // Name and status
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                chatTitle,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (_chat != null && !_chat!.isGroup)
+                _buildOnlineStatus(chatProvider, currentUserId),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDefaultAvatar(String name) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppConstants.primaryColor.withOpacity(0.2),
+      ),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppConstants.primaryColor,
+          ),
+        ),
+      ),
     );
   }
 
@@ -194,28 +294,41 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return _buildEmptyState();
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      reverse: true,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppConstants.paddingMedium,
-        vertical: AppConstants.paddingMedium,
-      ),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        final isCurrentUser = message.isFromCurrentUser(currentUserId);
-        final showTimestamp = _shouldShowTimestamp(messages, index);
+    return Consumer<ChatProvider>(
+      builder: (context, chatProvider, child) {
+        final hasMoreMessages = chatProvider.hasMoreMessages(widget.chatId);
+        final isLoadingMore = chatProvider.isLoadingMoreMessages(widget.chatId);
         
-        return Column(
-          children: [
-            if (showTimestamp)
-              _buildTimestampDivider(message.timestamp),
-            MessageBubble(
-              message: message,
-              isCurrentUser: isCurrentUser,
-            ),
-          ],
+        return ListView.builder(
+          controller: _scrollController,
+          reverse: true,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppConstants.paddingMedium,
+            vertical: AppConstants.paddingMedium,
+          ),
+          itemCount: messages.length + (hasMoreMessages ? 1 : 0),
+          itemBuilder: (context, index) {
+            // Load more indicator at the top (last item when reversed)
+            if (index == messages.length) {
+              return _buildLoadMoreIndicator(isLoadingMore, hasMoreMessages);
+            }
+            
+            final message = messages[index];
+            final isCurrentUser = message.isFromCurrentUser(currentUserId);
+            final showTimestamp = _shouldShowTimestamp(messages, index);
+            
+            return Column(
+              children: [
+                if (showTimestamp)
+                  _buildTimestampDivider(message.timestamp),
+                MessageBubble(
+                  message: message,
+                  isCurrentUser: isCurrentUser,
+                  onReply: _handleReply,
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -310,7 +423,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   Future<void> _sendMessage(ChatProvider chatProvider, String text) async {
     try {
-      await chatProvider.sendTextMessage(widget.chatId, text);
+      await chatProvider.sendTextMessage(
+        widget.chatId, 
+        text, 
+        replyToMessageId: _replyingToMessage?.id,
+      );
+      
+      // Clear reply state
+      setState(() {
+        _replyingToMessage = null;
+      });
+      
       // Scroll will happen automatically when new message arrives via stream
     } catch (e) {
       if (mounted) {
@@ -344,6 +467,156 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
+      ),
+    );
+  }
+
+  void _handleReply(Message message) {
+    setState(() {
+      _replyingToMessage = message;
+    });
+  }
+
+  Widget _buildReplyPreview() {
+    if (_replyingToMessage == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.all(AppConstants.paddingMedium),
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+        border: Border(
+          left: BorderSide(
+            color: AppConstants.primaryColor,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Replying to message',
+                  style: AppConstants.caption.copyWith(
+                    color: AppConstants.primaryColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _replyingToMessage!.text,
+                  style: AppConstants.bodyMedium.copyWith(
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              setState(() {
+                _replyingToMessage = null;
+              });
+            },
+            child: const Icon(
+              CupertinoIcons.clear,
+              size: 20,
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _onScroll() {
+    if (_isDisposed || !mounted) return;
+    
+    // Check if user scrolled to the top (end of list when reversed)
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreMessages();
+    }
+  }
+
+  Future<void> _loadMoreMessages() async {
+    if (_isLoadingMoreMessages || _isDisposed || !mounted) return;
+    
+    setState(() {
+      _isLoadingMoreMessages = true;
+    });
+    
+    try {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      await chatProvider.loadMoreMessages(widget.chatId);
+    } catch (e) {
+      if (mounted) {
+        // Show error snackbar or handle error
+        debugPrint('Failed to load more messages: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMoreMessages = false;
+        });
+      }
+    }
+  }
+
+  void _retryConnection(ChatProvider chatProvider) {
+    // Retry loading messages and refresh chat data
+    chatProvider.subscribeToChat(widget.chatId);
+  }
+
+  Widget _buildLoadMoreIndicator(bool isLoading, bool hasMore) {
+    if (!hasMore) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingLarge),
+        child: Center(
+          child: Text(
+            'No more messages',
+            style: AppConstants.caption.copyWith(
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    if (isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingLarge),
+        child: const Center(
+          child: CupertinoActivityIndicator(),
+        ),
+      );
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      child: Center(
+        child: CupertinoButton(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppConstants.paddingLarge,
+            vertical: AppConstants.paddingSmall,
+          ),
+          color: AppConstants.primaryColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+          onPressed: _loadMoreMessages,
+          child: Text(
+            'Load more messages',
+            style: AppConstants.bodyMedium.copyWith(
+              color: AppConstants.primaryColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -65,7 +65,7 @@ class ChatService {
   }
 
   // Send text message
-  Future<void> sendTextMessage(String chatId, String text) async {
+  Future<void> sendTextMessage(String chatId, String text, {String? replyToMessageId}) async {
     try {
       final currentUserId = _auth.currentUser?.uid;
       if (currentUserId == null) {
@@ -81,6 +81,7 @@ class ChatService {
         senderId: currentUserId,
         text: text.trim(),
         type: MessageType.text,
+        replyToMessageId: replyToMessageId,
       );
     } catch (e) {
       throw Exception('Failed to send message: ${e.toString()}');
@@ -234,12 +235,12 @@ class ChatService {
   // Delete message (for sender only)
   Future<void> deleteMessage(String messageId) async {
     try {
-      // Note: In a production app, you might want to just mark as deleted
-      // rather than actually deleting to maintain chat history integrity
-      // For now, we'll implement a simple deletion
-      
-      // This would require additional Firestore rules and implementation
-      throw UnimplementedError('Message deletion not implemented yet');
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.deleteMessage(messageId, currentUserId);
     } catch (e) {
       throw Exception('Failed to delete message: ${e.toString()}');
     }
@@ -248,10 +249,88 @@ class ChatService {
   // Edit message (for sender only)
   Future<void> editMessage(String messageId, String newText) async {
     try {
-      // This would require additional implementation in FirestoreService
-      throw UnimplementedError('Message editing not implemented yet');
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      if (newText.trim().isEmpty) {
+        throw Exception('Message cannot be empty');
+      }
+
+      await _firestoreService.editMessage(messageId, newText.trim(), currentUserId);
     } catch (e) {
       throw Exception('Failed to edit message: ${e.toString()}');
+    }
+  }
+
+  // Add reaction to message
+  Future<void> addReaction(String messageId, String emoji) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.addReaction(messageId, emoji, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to add reaction: ${e.toString()}');
+    }
+  }
+
+  // Remove reaction from message
+  Future<void> removeReaction(String messageId, String emoji) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.removeReaction(messageId, emoji, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to remove reaction: ${e.toString()}');
+    }
+  }
+
+  // Delete chat
+  Future<void> deleteChat(String chatId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.deleteChat(chatId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to delete chat: ${e.toString()}');
+    }
+  }
+
+  // Pin/unpin chat
+  Future<void> pinChat(String chatId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.pinChat(chatId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to pin chat: ${e.toString()}');
+    }
+  }
+
+  // Mark chat as read
+  Future<void> markChatAsRead(String chatId) async {
+    try {
+      final currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.markChatAsRead(chatId, currentUserId);
+    } catch (e) {
+      throw Exception('Failed to mark chat as read: ${e.toString()}');
     }
   }
 

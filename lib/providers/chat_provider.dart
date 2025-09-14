@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
@@ -25,6 +26,13 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, StreamSubscription> _messageSubscriptions = {};
   final Map<String, StreamSubscription> _typingSubscriptions = {};
   StreamSubscription? _chatsSubscription;
+  
+  // Pagination state
+  final Map<String, bool> _isLoadingMoreMessages = {};
+  final Map<String, bool> _hasMoreMessages = {};
+  final Map<String, int> _currentPage = {};
+  final Map<String, DocumentSnapshot?> _lastDocument = {};
+  static const int _messagesPerPage = 20;
 
   List<Chat> get chats => _chats;
   Map<String, List<Message>> get chatMessages => _chatMessages;
@@ -32,6 +40,11 @@ class ChatProvider extends ChangeNotifier {
   Map<String, List<String>> get typingUsers => _typingUsers;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  
+  // Pagination getters
+  bool isLoadingMoreMessages(String chatId) => _isLoadingMoreMessages[chatId] ?? false;
+  bool hasMoreMessages(String chatId) => _hasMoreMessages[chatId] ?? true;
+  int getCurrentPage(String chatId) => _currentPage[chatId] ?? 0;
 
   ChatProvider() {
     _initializeChats();
@@ -46,9 +59,13 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _subscribeToChats() {
+    _chatsSubscription?.cancel(); // Cancel existing subscription if any
     _chatsSubscription = _chatService.getUserChats().listen(
       (chats) async {
         try {
+          // Check if provider is disposed
+          if (_chatsSubscription == null) return;
+          
           // Filter out any null or invalid chats
           final validChats = chats.where((chat) => chat.id.isNotEmpty).toList();
           _chats = validChats;
@@ -63,29 +80,17 @@ class ChatProvider extends ChangeNotifier {
           
           // Load user data for each chat (with improved error handling)
           for (final chat in validChats) {
-            for (final participantId in chat.participants) {
-              if (participantId.isNotEmpty && !_users.containsKey(participantId)) {
-                try {
-                  final user = await _firestoreService.getUserById(participantId);
-                  if (user != null) {
-                    _users[participantId] = user;
-                    // Cache the user data (with error handling)
-                    try {
-                      await _cacheService.cacheUser(user);
-                    } catch (e) {
-                      // Silent cache failure - not critical
-                    }
-                  }
-                } catch (e) {
-                  // Log but don't fail the entire subscription
-                  _errorService.logError('Failed to load user $participantId', error: e);
-                }
-              }
-            }
+            // Check if still subscribed before continuing
+            if (_chatsSubscription == null) return;
+            
+            await _loadChatParticipants(chat);
           }
           
-          _clearError(); // Clear any previous errors on successful load
-          notifyListeners();
+          // Only notify listeners if still subscribed
+          if (_chatsSubscription != null) {
+            _clearError(); // Clear any previous errors on successful load
+            notifyListeners();
+          }
         } catch (e) {
           // Log error but don't crash the subscription
           _errorService.logError('Error processing chats subscription', error: e);
@@ -131,10 +136,74 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> _cacheMessages(String chatId, List<Message> messages) async {
     try {
+      // Cache all messages (legacy support)
       await _cacheService.cacheMessages(chatId, messages);
+      
+      // Also cache by pages for better pagination support
+      const pageSize = _messagesPerPage;
+      for (int i = 0; i < messages.length; i += pageSize) {
+        final pageMessages = messages.skip(i).take(pageSize).toList();
+        final pageNumber = (i / pageSize).floor();
+        await _cacheService.cacheMessages(chatId, pageMessages, page: pageNumber);
+      }
     } catch (e) {
       // Silent cache failure - not critical
       _errorService.logError('Failed to cache messages for chat $chatId', error: e);
+    }
+  }
+
+  Future<void> _loadUserWithCache(String userId) async {
+    try {
+      // Try to load from cache first
+      final cachedUser = await _cacheService.getCachedUser(userId);
+      if (cachedUser != null) {
+        _users[userId] = cachedUser;
+        notifyListeners();
+        
+        // Load fresh data in background if cache is old
+        final lastSync = await _cacheService.getLastSyncTime('user_$userId');
+        if (lastSync == null || DateTime.now().difference(lastSync).inHours > 1) {
+          _loadUserFromServer(userId);
+        }
+      } else {
+        // No cache, load from server
+        await _loadUserFromServer(userId);
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load user with cache $userId', error: e);
+    }
+  }
+
+  Future<void> _loadUserFromServer(String userId) async {
+    try {
+      final user = await _firestoreService.getUserById(userId);
+      if (user != null) {
+        _users[userId] = user;
+        
+        // Cache the user data
+        await _cacheService.cacheUser(user);
+        await _cacheService.setLastSyncTime('user_$userId', DateTime.now());
+        
+        // Cache online status if available
+        await _cacheService.cacheUserOnlineStatus(userId, user.isOnline, user.lastSeen);
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load user from server $userId', error: e);
+    }
+  }
+
+  Future<void> _loadChatParticipants(Chat chat) async {
+    try {
+      for (final participantId in chat.participants) {
+        if (participantId.isNotEmpty && !_users.containsKey(participantId)) {
+          // Load user with cache-first approach
+          await _loadUserWithCache(participantId);
+        }
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load chat participants for ${chat.id}', error: e);
     }
   }
 
@@ -145,15 +214,95 @@ class ChatProvider extends ChangeNotifier {
   void subscribeToChat(String chatId) {
     if (_messageSubscriptions.containsKey(chatId)) return;
 
+    // Initialize pagination state
+    _currentPage[chatId] = 0;
+    _hasMoreMessages[chatId] = true;
+    _isLoadingMoreMessages[chatId] = false;
+
     // Load cached messages first
     _loadCachedMessages(chatId);
 
-    _messageSubscriptions[chatId] = _chatService.getChatMessages(chatId).listen(
-      (messages) {
-        _chatMessages[chatId] = messages;
-        // Cache messages for offline access
-        _cacheMessages(chatId, messages);
+    // Load initial messages with pagination
+    _loadInitialMessages(chatId);
+
+    // Subscribe to real-time updates for new messages only
+    _subscribeToNewMessages(chatId);
+  }
+
+  Future<void> _loadInitialMessages(String chatId) async {
+    try {
+      // Check if we have cached messages
+      final cachedMessages = await _cacheService.getCachedMessages(chatId, limit: _messagesPerPage);
+      
+      if (cachedMessages.isNotEmpty) {
+        _chatMessages[chatId] = cachedMessages;
         notifyListeners();
+        
+        // Load newer messages from server if available
+        final lastCachedTime = await _cacheService.getLastMessageTime(chatId);
+        if (lastCachedTime != null) {
+          _loadNewerMessages(chatId, lastCachedTime);
+        }
+      } else {
+        // No cache, load from server
+        await loadMoreMessages(chatId);
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load initial messages for chat $chatId', error: e);
+    }
+  }
+
+  Future<void> _loadNewerMessages(String chatId, DateTime after) async {
+    try {
+      final newerMessages = await _firestoreService.getMessagesAfter(chatId, after);
+      if (newerMessages.isNotEmpty) {
+        final existingMessages = _chatMessages[chatId] ?? [];
+        final allMessages = [...newerMessages, ...existingMessages];
+        
+        // Remove duplicates and sort
+        final uniqueMessages = <String, Message>{};
+        for (final message in allMessages) {
+          uniqueMessages[message.id] = message;
+        }
+        
+        final sortedMessages = uniqueMessages.values.toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        
+        _chatMessages[chatId] = sortedMessages;
+        
+        // Cache the updated messages
+        await _cacheMessages(chatId, sortedMessages);
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorService.logError('Failed to load newer messages for chat $chatId', error: e);
+    }
+  }
+
+  void _subscribeToNewMessages(String chatId) {
+    // Subscribe to real-time updates for very recent messages only
+    _messageSubscriptions[chatId] = _firestoreService
+        .getChatMessages(chatId, limit: 5)
+        .listen(
+      (recentMessages) {
+        if (recentMessages.isEmpty) return;
+        
+        final existingMessages = _chatMessages[chatId] ?? [];
+        final existingIds = existingMessages.map((m) => m.id).toSet();
+        
+        // Only add truly new messages
+        final newMessages = recentMessages.where((m) => !existingIds.contains(m.id)).toList();
+        
+        if (newMessages.isNotEmpty) {
+          final allMessages = [...newMessages, ...existingMessages];
+          allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          
+          _chatMessages[chatId] = allMessages;
+          
+          // Cache the updated messages
+          _cacheMessages(chatId, allMessages);
+          notifyListeners();
+        }
       },
       onError: (error) {
         _errorService.logError('Message subscription error for chat $chatId', error: error);
@@ -162,10 +311,80 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
+  Future<void> loadMoreMessages(String chatId) async {
+    if (_isLoadingMoreMessages[chatId] == true || _hasMoreMessages[chatId] == false) {
+      return;
+    }
+
+    try {
+      _isLoadingMoreMessages[chatId] = true;
+      notifyListeners();
+
+      final currentPage = _currentPage[chatId] ?? 0;
+      final nextPage = currentPage + 1;
+
+      // Try to load from cache first
+      final cachedMessages = await _cacheService.getCachedMessages(chatId, page: nextPage);
+      
+      List<Message> newMessages;
+      if (cachedMessages.isNotEmpty) {
+        newMessages = cachedMessages;
+      } else {
+        // Load from server
+        newMessages = await _firestoreService.getChatMessagesPaginated(
+          chatId,
+          limit: _messagesPerPage,
+          lastDocument: _lastDocument[chatId],
+        );
+        
+        // Cache the new page
+        if (newMessages.isNotEmpty) {
+          await _cacheService.cacheMessages(chatId, newMessages, page: nextPage);
+        }
+      }
+
+      if (newMessages.isNotEmpty) {
+        final existingMessages = _chatMessages[chatId] ?? [];
+        final allMessages = [...existingMessages, ...newMessages];
+        
+        // Remove duplicates
+        final uniqueMessages = <String, Message>{};
+        for (final message in allMessages) {
+          uniqueMessages[message.id] = message;
+        }
+        
+        final sortedMessages = uniqueMessages.values.toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        
+        _chatMessages[chatId] = sortedMessages;
+        _currentPage[chatId] = nextPage;
+        
+        // Check if there are more messages
+        _hasMoreMessages[chatId] = newMessages.length == _messagesPerPage;
+      } else {
+        _hasMoreMessages[chatId] = false;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _errorService.logError('Failed to load more messages for chat $chatId', error: e);
+      _setError('Failed to load more messages');
+    } finally {
+      _isLoadingMoreMessages[chatId] = false;
+      notifyListeners();
+    }
+  }
+
   void unsubscribeFromChat(String chatId) {
     _messageSubscriptions[chatId]?.cancel();
     _messageSubscriptions.remove(chatId);
     _chatMessages.remove(chatId);
+    
+    // Clean up pagination state
+    _isLoadingMoreMessages.remove(chatId);
+    _hasMoreMessages.remove(chatId);
+    _currentPage.remove(chatId);
+    _lastDocument.remove(chatId);
   }
 
   Future<String> getOrCreateDirectChat(String otherUserId) async {
@@ -177,10 +396,7 @@ class ChatProvider extends ChangeNotifier {
       
       // Load user data if not already loaded
       if (!_users.containsKey(otherUserId)) {
-        final user = await _firestoreService.getUserById(otherUserId);
-        if (user != null) {
-          _users[otherUserId] = user;
-        }
+        await _loadUserWithCache(otherUserId);
       }
       
       return chatId;
@@ -199,9 +415,12 @@ class ChatProvider extends ChangeNotifier {
       
       final chatId = await _chatService.createGroupChat(participantIds, groupName);
       
-      // Load user data for participants
-      final usersMap = await _firestoreService.getUsersMap(participantIds);
-      _users.addAll(usersMap);
+      // Load user data for participants with caching
+      for (final participantId in participantIds) {
+        if (!_users.containsKey(participantId)) {
+          await _loadUserWithCache(participantId);
+        }
+      }
       
       return chatId;
     } catch (e) {
@@ -212,10 +431,10 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendTextMessage(String chatId, String text) async {
+  Future<void> sendTextMessage(String chatId, String text, {String? replyToMessageId}) async {
     try {
       // Don't set loading state for message sending to avoid UI freeze
-      await _chatService.sendTextMessage(chatId, text);
+      await _chatService.sendTextMessage(chatId, text, replyToMessageId: replyToMessageId);
       
       // Stop typing indicator when message is sent
       await stopTyping(chatId);
@@ -224,6 +443,88 @@ class ChatProvider extends ChangeNotifier {
     } catch (e) {
       _setError(_errorService.getFirebaseErrorMessage(e));
       _errorService.logError('Failed to send message', error: e);
+    }
+  }
+
+  Future<void> editMessage(String messageId, String newText) async {
+    try {
+      await _chatService.editMessage(messageId, newText);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to edit message', error: e);
+    }
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    try {
+      await _chatService.deleteMessage(messageId);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to delete message', error: e);
+    }
+  }
+
+  Future<void> addReaction(String messageId, String emoji) async {
+    try {
+      await _chatService.addReaction(messageId, emoji);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to add reaction', error: e);
+    }
+  }
+
+  Future<void> removeReaction(String messageId, String emoji) async {
+    try {
+      await _chatService.removeReaction(messageId, emoji);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to remove reaction', error: e);
+    }
+  }
+
+  Future<void> deleteChat(String chatId) async {
+    try {
+      _setLoading(true);
+      await _chatService.deleteChat(chatId);
+      
+      // Remove from local state
+      _chats.removeWhere((chat) => chat.id == chatId);
+      _chatMessages.remove(chatId);
+      
+      // Unsubscribe from chat
+      unsubscribeFromChat(chatId);
+      
+      _clearError();
+      notifyListeners();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to delete chat', error: e);
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> pinChat(String chatId) async {
+    try {
+      await _chatService.pinChat(chatId);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to pin chat', error: e);
+    }
+  }
+
+  Future<void> markChatAsRead(String chatId) async {
+    try {
+      await _chatService.markChatAsRead(chatId);
+      _clearError();
+    } catch (e) {
+      _setError(_errorService.getFirebaseErrorMessage(e));
+      _errorService.logError('Failed to mark chat as read', error: e);
     }
   }
 
@@ -332,12 +633,58 @@ class ChatProvider extends ChangeNotifier {
     _clearError();
   }
 
+  // Refresh user data (force reload from server)
+  Future<void> refreshUser(String userId) async {
+    try {
+      await _loadUserFromServer(userId);
+    } catch (e) {
+      _errorService.logError('Failed to refresh user $userId', error: e);
+    }
+  }
+
+  // Get user with cache fallback
+  UserModel? getUser(String userId) {
+    return _users[userId];
+  }
+
+  // Preload users for better performance
+  Future<void> preloadUsers(List<String> userIds) async {
+    final futures = <Future>[];
+    for (final userId in userIds) {
+      if (!_users.containsKey(userId)) {
+        futures.add(_loadUserWithCache(userId));
+      }
+    }
+    await Future.wait(futures);
+  }
+
   @override
   void dispose() {
+    // Cancel all subscriptions safely
     _chatsSubscription?.cancel();
+    _chatsSubscription = null;
+    
+    // Cancel message subscriptions
     for (final subscription in _messageSubscriptions.values) {
       subscription.cancel();
     }
+    _messageSubscriptions.clear();
+    
+    // Cancel typing subscriptions
+    for (final subscription in _typingSubscriptions.values) {
+      subscription.cancel();
+    }
+    _typingSubscriptions.clear();
+    
+    // Dispose typing service
+    _typingService.dispose();
+    
+    // Clean up pagination state
+    _isLoadingMoreMessages.clear();
+    _hasMoreMessages.clear();
+    _currentPage.clear();
+    _lastDocument.clear();
+    
     super.dispose();
   }
 }

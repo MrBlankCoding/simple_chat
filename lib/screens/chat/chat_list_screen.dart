@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+import '../../models/chat_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/theme_provider.dart';
@@ -68,10 +69,31 @@ class _ChatListScreenState extends State<ChatListScreen> {
       return _buildEmptyState(theme);
     }
 
+    // Sort chats: pinned chats first, then by last message time
+    final sortedChats = List<Chat>.from(chats);
+    sortedChats.sort((a, b) {
+      final aPinned = a.isPinnedBy(currentUserId);
+      final bPinned = b.isPinnedBy(currentUserId);
+      
+      // If one is pinned and the other isn't, pinned comes first
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      
+      // If both are pinned or both are not pinned, sort by last message time
+      final aTime = a.lastMessageTime;
+      final bTime = b.lastMessageTime;
+      
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      
+      return bTime.compareTo(aTime); // Most recent first
+    });
+
     return ListView.builder(
-      itemCount: chats.length,
+      itemCount: sortedChats.length,
       itemBuilder: (context, index) {
-        final chat = chats[index];
+        final chat = sortedChats[index];
         return ChatListItem(
           chat: chat,
           currentUserId: currentUserId,
