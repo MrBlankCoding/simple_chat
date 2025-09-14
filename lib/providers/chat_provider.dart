@@ -280,23 +280,36 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _subscribeToNewMessages(String chatId) {
-    // Subscribe to real-time updates for very recent messages only
+    // Subscribe to real-time updates for all messages in the chat
     _messageSubscriptions[chatId] = _firestoreService
-        .getChatMessages(chatId, limit: 5)
+        .getChatMessages(chatId, limit: 50) // Increased limit to catch more changes
         .listen(
-      (recentMessages) {
-        if (recentMessages.isEmpty) return;
+      (updatedMessages) {
+        if (updatedMessages.isEmpty) return;
         
         final existingMessages = _chatMessages[chatId] ?? [];
-        final existingIds = existingMessages.map((m) => m.id).toSet();
         
-        // Only add truly new messages
-        final newMessages = recentMessages.where((m) => !existingIds.contains(m.id)).toList();
+        // Update existing messages and add new ones
+        final allMessagesMap = <String, Message>{};
         
-        if (newMessages.isNotEmpty) {
-          final allMessages = [...newMessages, ...existingMessages];
-          allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-          
+        // Add all updated messages from stream
+        for (var message in updatedMessages) {
+          allMessagesMap[message.id] = message;
+        }
+        
+        // Add remaining existing messages that weren't in the stream
+        for (var message in existingMessages) {
+          if (!allMessagesMap.containsKey(message.id)) {
+            allMessagesMap[message.id] = message;
+          }
+        }
+        
+        // Convert back to list and sort
+        final allMessages = allMessagesMap.values.toList();
+        allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        
+        // Check if there are actual changes before updating
+        if (_hasMessagesChanged(existingMessages, allMessages)) {
           _chatMessages[chatId] = allMessages;
           
           // Cache the updated messages
@@ -309,6 +322,34 @@ class ChatProvider extends ChangeNotifier {
         // Don't set UI error for message subscription issues - continue with cached data
       },
     );
+  }
+
+  bool _hasMessagesChanged(List<Message> oldMessages, List<Message> newMessages) {
+    if (oldMessages.length != newMessages.length) return true;
+    
+    for (int i = 0; i < oldMessages.length; i++) {
+      final oldMsg = oldMessages[i];
+      final newMsg = newMessages[i];
+      
+      // Check if message content, read status, or edit status changed
+      if (oldMsg.id != newMsg.id ||
+          oldMsg.text != newMsg.text ||
+          oldMsg.isEdited != newMsg.isEdited ||
+          oldMsg.isDeleted != newMsg.isDeleted ||
+          !_listEquals(oldMsg.readBy, newMsg.readBy)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  bool _listEquals(List<String> list1, List<String> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i] != list2[i]) return false;
+    }
+    return true;
   }
 
   Future<void> loadMoreMessages(String chatId) async {
@@ -448,9 +489,18 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> editMessage(String messageId, String newText) async {
     try {
+      // Update local state immediately for better UX
+      _updateMessageLocally(messageId, (message) => message.copyWith(
+        text: newText,
+        isEdited: true,
+        editedAt: DateTime.now(),
+      ));
+      
       await _chatService.editMessage(messageId, newText);
       _clearError();
     } catch (e) {
+      // Revert local changes on error
+      _revertMessageEdit(messageId);
       _setError(_errorService.getFirebaseErrorMessage(e));
       _errorService.logError('Failed to edit message', error: e);
     }
@@ -458,12 +508,40 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> deleteMessage(String messageId) async {
     try {
+      // Update local state immediately for better UX
+      _updateMessageLocally(messageId, (message) => message.copyWith(
+        isDeleted: true,
+        text: 'This message was deleted',
+      ));
+      
       await _chatService.deleteMessage(messageId);
       _clearError();
     } catch (e) {
+      // Revert local changes on error
+      _revertMessageEdit(messageId);
       _setError(_errorService.getFirebaseErrorMessage(e));
       _errorService.logError('Failed to delete message', error: e);
     }
+  }
+
+  void _updateMessageLocally(String messageId, Message Function(Message) updateFunction) {
+    for (final chatId in _chatMessages.keys) {
+      final messages = _chatMessages[chatId]!;
+      final messageIndex = messages.indexWhere((msg) => msg.id == messageId);
+      if (messageIndex != -1) {
+        final originalMessage = messages[messageIndex];
+        final updatedMessage = updateFunction(originalMessage);
+        messages[messageIndex] = updatedMessage;
+        notifyListeners();
+        break;
+      }
+    }
+  }
+
+  void _revertMessageEdit(String messageId) {
+    // For now, we'll let the real-time stream handle reverting
+    // In a more sophisticated implementation, we could store original states
+    // But the stream subscription will update with the correct server state
   }
 
   Future<void> addReaction(String messageId, String emoji) async {
@@ -571,6 +649,35 @@ class ChatProvider extends ChangeNotifier {
       await _chatService.markMessagesAsRead(chatId);
     } catch (e) {
       // Silently fail - not critical
+    }
+  }
+
+  Future<void> markMessageAsRead(String messageId, String chatId) async {
+    try {
+      final currentUserId = _chatService.currentUserId ?? '';
+      
+      // Check if message is already marked as read locally to avoid duplicate calls
+      if (_chatMessages.containsKey(chatId)) {
+        final messages = _chatMessages[chatId]!;
+        final messageIndex = messages.indexWhere((msg) => msg.id == messageId);
+        if (messageIndex != -1) {
+          final message = messages[messageIndex];
+          if (message.readBy.contains(currentUserId)) {
+            return; // Already marked as read, no need to update
+          }
+          
+          // Update local state immediately for better UX
+          final updatedMessage = message.markAsRead(currentUserId);
+          messages[messageIndex] = updatedMessage;
+          notifyListeners();
+        }
+      }
+      
+      // Use the more efficient single message update
+      await _firestoreService.markSingleMessageAsRead(messageId, currentUserId);
+    } catch (e) {
+      // Silently fail - not critical for UX
+      _errorService.logError('Failed to mark message as read', error: e);
     }
   }
 

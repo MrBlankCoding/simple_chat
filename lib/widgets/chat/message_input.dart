@@ -4,11 +4,15 @@ import '../../utils/constants.dart';
 class MessageInput extends StatefulWidget {
   final Function(String) onSendMessage;
   final VoidCallback onSendImage;
+  final TextEditingController? controller;
+  final bool isEditing;
 
   const MessageInput({
     super.key,
     required this.onSendMessage,
     required this.onSendImage,
+    this.controller,
+    this.isEditing = false,
   });
 
   @override
@@ -16,19 +20,23 @@ class MessageInput extends StatefulWidget {
 }
 
 class _MessageInputState extends State<MessageInput> {
-  final TextEditingController _textController = TextEditingController();
+  late TextEditingController _textController;
   bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
+    _textController = widget.controller ?? TextEditingController();
     _textController.addListener(_onTextChanged);
+    _onTextChanged(); // Initialize _hasText state
   }
 
   @override
   void dispose() {
     _textController.removeListener(_onTextChanged);
-    _textController.dispose();
+    if (widget.controller == null) {
+      _textController.dispose();
+    }
     super.dispose();
   }
 
@@ -42,7 +50,9 @@ class _MessageInputState extends State<MessageInput> {
     final text = _textController.text.trim();
     if (text.isNotEmpty) {
       widget.onSendMessage(text);
-      _textController.clear();
+      if (!widget.isEditing) {
+        _textController.clear();
+      }
     }
   }
 
@@ -98,7 +108,7 @@ class _MessageInputState extends State<MessageInput> {
                   ),
                   child: CupertinoTextField(
                     controller: _textController,
-                    placeholder: AppStrings.typeMessage,
+                    placeholder: widget.isEditing ? 'Edit your message...' : AppStrings.typeMessage,
                     placeholderStyle: const TextStyle(
                       color: CupertinoColors.placeholderText,
                     ),

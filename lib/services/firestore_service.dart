@@ -431,6 +431,20 @@ class FirestoreService {
     }
   }
 
+  // Mark a single message as read (more efficient for individual messages)
+  Future<void> markSingleMessageAsRead(String messageId, String userId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.messagesCollection)
+          .doc(messageId)
+          .update({
+        'readBy': FieldValue.arrayUnion([userId])
+      });
+    } catch (e) {
+      throw Exception('Failed to mark message as read: ${e.toString()}');
+    }
+  }
+
   // Edit message
   Future<void> editMessage(String messageId, String newText, String userId) async {
     try {

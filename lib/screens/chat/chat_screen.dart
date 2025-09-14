@@ -32,6 +32,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<Message> _previousMessages = [];
   bool _isDisposed = false;
   Message? _replyingToMessage;
+  Message? _editingMessage;
   bool _isLoadingMoreMessages = false;
 
   // Getter for _chat to access the current chat
@@ -170,10 +171,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   // Reply preview
                   if (_replyingToMessage != null) _buildReplyPreview(),
                   
+                  // Edit preview
+                  if (_editingMessage != null) _buildEditPreview(),
+                  
                   // Message Input
                   MessageInput(
-                    onSendMessage: (text) => _sendMessage(chatProvider, text),
+                    controller: _messageController,
+                    onSendMessage: (text) => _editingMessage != null 
+                      ? _saveEditedMessage(chatProvider, text)
+                      : _sendMessage(chatProvider, text),
                     onSendImage: () => _sendImage(chatProvider),
+                    isEditing: _editingMessage != null,
                   ),
                 ],
               ),
@@ -325,6 +333,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   message: message,
                   isCurrentUser: isCurrentUser,
                   onReply: _handleReply,
+                  onEdit: _handleEdit,
                 ),
               ],
             );
@@ -474,6 +483,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _handleReply(Message message) {
     setState(() {
       _replyingToMessage = message;
+      _editingMessage = null; // Clear editing if replying
+    });
+  }
+
+  void _handleEdit(Message message) {
+    setState(() {
+      _editingMessage = message;
+      _replyingToMessage = null; // Clear reply if editing
+      _messageController.text = message.text;
     });
   }
 
@@ -536,11 +554,102 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildEditPreview() {
+    if (_editingMessage == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.all(AppConstants.paddingMedium),
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor,
+        borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+        border: Border(
+          left: BorderSide(
+            color: CupertinoColors.systemOrange,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Editing message',
+                  style: AppConstants.caption.copyWith(
+                    color: CupertinoColors.systemOrange,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _editingMessage!.text,
+                  style: AppConstants.bodyMedium.copyWith(
+                    color: CupertinoColors.secondaryLabel,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            onPressed: () {
+              setState(() {
+                _editingMessage = null;
+                _messageController.clear();
+              });
+            },
+            child: const Icon(
+              CupertinoIcons.clear,
+              size: 20,
+              color: CupertinoColors.secondaryLabel,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveEditedMessage(ChatProvider chatProvider, String text) async {
+    if (_editingMessage == null) return;
+    
+    try {
+      await chatProvider.editMessage(_editingMessage!.id, text);
+      
+      // Clear editing state
+      setState(() {
+        _editingMessage = null;
+        _messageController.clear();
+      });
+    } catch (e) {
+      if (mounted) {
+        showCupertinoDialog(
+          context: context,
+          builder: (context) => CupertinoAlertDialog(
+            title: const Text('Error'),
+            content: Text('Failed to edit message: ${e.toString()}'),
+            actions: [
+              CupertinoDialogAction(
+                child: const Text('OK'),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
+
   void _onScroll() {
     if (_isDisposed || !mounted) return;
     
     // Check if user scrolled to the top (end of list when reversed)
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    // Trigger loading when within 100 pixels of the top for smoother experience
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 100) {
       _loadMoreMessages();
     }
   }
@@ -598,26 +707,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     }
     
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.paddingMedium),
-      child: Center(
-        child: CupertinoButton(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppConstants.paddingLarge,
-            vertical: AppConstants.paddingSmall,
-          ),
-          color: AppConstants.primaryColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
-          onPressed: _loadMoreMessages,
-          child: Text(
-            'Load more messages',
-            style: AppConstants.bodyMedium.copyWith(
-              color: AppConstants.primaryColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ),
-    );
+    // Return empty container for seamless scroll loading
+    return const SizedBox.shrink();
   }
 }

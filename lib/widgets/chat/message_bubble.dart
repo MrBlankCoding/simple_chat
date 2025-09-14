@@ -6,22 +6,58 @@ import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
+import 'message_options_modal.dart';
 
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends StatefulWidget {
   final Message message;
   final bool isCurrentUser;
   final Function(Message)? onReply;
+  final Function(Message)? onEdit;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isCurrentUser,
     this.onReply,
+    this.onEdit,
   });
 
   @override
+  State<MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<MessageBubble> {
+  bool _hasMarkedAsRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Mark message as read when it comes into view (for received messages)
+    if (!widget.isCurrentUser && !_hasMarkedAsRead) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _markMessageAsRead();
+      });
+    }
+  }
+
+  void _markMessageAsRead() {
+    if (!_hasMarkedAsRead && !widget.isCurrentUser && mounted) {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final currentUserId = authProvider.currentUser?.uid;
+      
+      if (currentUserId != null && !widget.message.readBy.contains(currentUserId)) {
+        chatProvider.markMessageAsRead(widget.message.id, widget.message.chatId);
+        setState(() {
+          _hasMarkedAsRead = true;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (message.isDeleted) {
+    if (widget.message.isDeleted) {
       return _buildDeletedMessage();
     }
 
@@ -32,23 +68,23 @@ class MessageBubble extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: AppConstants.paddingSmall),
           child: Column(
-            crossAxisAlignment: isCurrentUser 
+            crossAxisAlignment: widget.isCurrentUser 
                 ? CrossAxisAlignment.end 
                 : CrossAxisAlignment.start,
             children: [
               // Reply preview if this is a reply
-              if (message.isReply) _buildReplyPreview(),
+              if (widget.message.isReply) _buildReplyPreview(),
               
               // Main message bubble
               GestureDetector(
                 onLongPress: () => _showMessageOptions(context, chatProvider, currentUserId),
                 child: Row(
-                  mainAxisAlignment: isCurrentUser 
+                  mainAxisAlignment: widget.isCurrentUser 
                     ? MainAxisAlignment.end 
                     : MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (isCurrentUser) const Spacer(flex: 1),
+                    if (widget.isCurrentUser) const Spacer(flex: 1),
                     Flexible(
                       flex: 3,
                       child: Container(
@@ -57,24 +93,24 @@ class MessageBubble extends StatelessWidget {
                           vertical: AppConstants.paddingSmall,
                         ),
                         decoration: BoxDecoration(
-                          color: isCurrentUser 
+                          color: widget.isCurrentUser 
                             ? AppConstants.primaryColor 
                             : AppConstants.surfaceColor,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(AppConstants.borderRadiusMedium),
                             topRight: const Radius.circular(AppConstants.borderRadiusMedium),
                             bottomLeft: Radius.circular(
-                              isCurrentUser ? AppConstants.borderRadiusMedium : AppConstants.borderRadiusSmall,
+                              widget.isCurrentUser ? AppConstants.borderRadiusMedium : AppConstants.borderRadiusSmall,
                             ),
                             bottomRight: Radius.circular(
-                              isCurrentUser ? AppConstants.borderRadiusSmall : AppConstants.borderRadiusMedium,
+                              widget.isCurrentUser ? AppConstants.borderRadiusSmall : AppConstants.borderRadiusMedium,
                             ),
                           ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (message.type == MessageType.image)
+                            if (widget.message.type == MessageType.image)
                               _buildImageContent()
                             else
                               _buildTextContent(),
@@ -86,33 +122,27 @@ class MessageBubble extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  AppHelpers.formatMessageTime(message.timestamp),
+                                  AppHelpers.formatMessageTime(widget.message.timestamp),
                                   style: AppConstants.caption.copyWith(
-                                    color: isCurrentUser 
+                                    color: widget.isCurrentUser 
                                       ? CupertinoColors.white.withOpacity(0.7)
                                       : CupertinoColors.secondaryLabel,
                                   ),
                                 ),
-                                if (message.isEdited) ...[
+                                if (widget.message.isEdited) ...[
                                   const SizedBox(width: 4),
                                   Text(
                                     '• edited',
                                     style: AppConstants.caption.copyWith(
-                                      color: isCurrentUser 
+                                      color: widget.isCurrentUser 
                                         ? CupertinoColors.white.withOpacity(0.7)
                                         : CupertinoColors.secondaryLabel,
                                     ),
                                   ),
                                 ],
-                                if (isCurrentUser) ...[
+                                if (widget.isCurrentUser) ...[
                                   const SizedBox(width: 4),
-                                  Icon(
-                                    message.readBy.length > 1 
-                                      ? CupertinoIcons.checkmark_alt_circle_fill
-                                      : CupertinoIcons.checkmark_circle,
-                                    size: 12,
-                                    color: CupertinoColors.white.withOpacity(0.7),
-                                  ),
+                                  _buildReadStatusIcon(),
                                 ],
                               ],
                             ),
@@ -120,13 +150,13 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (!isCurrentUser) const Spacer(flex: 1),
+                    if (!widget.isCurrentUser) const Spacer(flex: 1),
                   ],
                 ),
               ),
               
               // Reactions
-              if (message.reactions.isNotEmpty) _buildReactions(chatProvider, currentUserId),
+              if (widget.message.reactions.isNotEmpty) _buildReactions(chatProvider, currentUserId),
             ],
           ),
         );
@@ -136,9 +166,9 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildTextContent() {
     return Text(
-      message.text,
+      widget.message.text,
       style: AppConstants.bodyMedium.copyWith(
-        color: isCurrentUser 
+        color: widget.isCurrentUser 
           ? CupertinoColors.white 
           : CupertinoColors.label,
       ),
@@ -146,7 +176,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildImageContent() {
-    if (message.imageUrl == null || message.imageUrl!.isEmpty) {
+    if (widget.message.imageUrl == null || widget.message.imageUrl!.isEmpty) {
       return _buildTextContent();
     }
 
@@ -156,7 +186,7 @@ class MessageBubble extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(AppConstants.borderRadiusSmall),
           child: CachedNetworkImage(
-            imageUrl: message.imageUrl!,
+            imageUrl: widget.message.imageUrl!,
             width: 200,
             height: 200,
             fit: BoxFit.cover,
@@ -181,7 +211,7 @@ class MessageBubble extends StatelessWidget {
             ),
           ),
         ),
-        if (message.text.isNotEmpty && message.text != 'Photo') ...[
+        if (widget.message.text.isNotEmpty && widget.message.text != 'Photo') ...[
           const SizedBox(height: 8),
           _buildTextContent(),
         ],
@@ -193,11 +223,11 @@ class MessageBubble extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: AppConstants.paddingSmall),
       child: Row(
-        mainAxisAlignment: isCurrentUser 
+        mainAxisAlignment: widget.isCurrentUser 
           ? MainAxisAlignment.end 
           : MainAxisAlignment.start,
         children: [
-          if (isCurrentUser) const Spacer(flex: 1),
+          if (widget.isCurrentUser) const Spacer(flex: 1),
           Flexible(
             flex: 3,
             child: Container(
@@ -229,7 +259,7 @@ class MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          if (!isCurrentUser) const Spacer(flex: 1),
+          if (!widget.isCurrentUser) const Spacer(flex: 1),
         ],
       ),
     );
@@ -239,8 +269,8 @@ class MessageBubble extends StatelessWidget {
     return Container(
       margin: EdgeInsets.only(
         bottom: 4,
-        left: isCurrentUser ? 50 : 0,
-        right: isCurrentUser ? 0 : 50,
+        left: widget.isCurrentUser ? 50 : 0,
+        right: widget.isCurrentUser ? 0 : 50,
       ),
       child: Container(
         padding: const EdgeInsets.all(8),
@@ -258,7 +288,7 @@ class MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Replying to ${message.replyToSenderId == message.senderId ? 'themselves' : 'message'}',
+              'Replying to ${widget.message.replyToSenderId == widget.message.senderId ? 'themselves' : 'message'}',
               style: AppConstants.caption.copyWith(
                 color: AppConstants.primaryColor,
                 fontWeight: FontWeight.w600,
@@ -266,7 +296,7 @@ class MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              message.replyToText ?? 'Original message',
+              widget.message.replyToText ?? 'Original message',
               style: AppConstants.caption.copyWith(
                 color: CupertinoColors.secondaryLabel,
               ),
@@ -279,13 +309,37 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
+  Widget _buildReadStatusIcon() {
+    // For current user's messages, show read status
+    final senderId = widget.message.senderId;
+    
+    // Count how many people other than sender have read the message
+    final readByOthers = widget.message.readBy.where((userId) => userId != senderId).length;
+    
+    if (readByOthers == 0) {
+      // Only sender has read it (message sent but not read by others)
+      return Icon(
+        CupertinoIcons.checkmark,
+        size: 12,
+        color: CupertinoColors.white.withOpacity(0.7),
+      );
+    } else {
+      // Message has been read by others - show double checkmark in blue
+      return Icon(
+        CupertinoIcons.checkmark_alt,
+        size: 12,
+        color: CupertinoColors.systemBlue,
+      );
+    }
+  }
+
   Widget _buildReactions(ChatProvider chatProvider, String currentUserId) {
     return Container(
       margin: const EdgeInsets.only(top: 4),
       child: Wrap(
         spacing: 4,
         runSpacing: 4,
-        children: message.reactions.entries.map((entry) {
+        children: widget.message.reactions.entries.map((entry) {
           final emoji = entry.key;
           final users = entry.value;
           final hasUserReacted = users.contains(currentUserId);
@@ -293,9 +347,9 @@ class MessageBubble extends StatelessWidget {
           return GestureDetector(
             onTap: () {
               if (hasUserReacted) {
-                chatProvider.removeReaction(message.id, emoji);
+                chatProvider.removeReaction(widget.message.id, emoji);
               } else {
-                chatProvider.addReaction(message.id, emoji);
+                chatProvider.addReaction(widget.message.id, emoji);
               }
             },
             child: Container(
@@ -338,164 +392,15 @@ class MessageBubble extends StatelessWidget {
   void _showMessageOptions(BuildContext context, ChatProvider chatProvider, String currentUserId) {
     showCupertinoModalPopup(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        actions: [
-          // Reply option
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              onReply?.call(message);
-            },
-            child: const Row(
-              children: [
-                Icon(CupertinoIcons.reply),
-                SizedBox(width: 12),
-                Text('Reply'),
-              ],
-            ),
-          ),
-          
-          // React option
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              _showReactionPicker(context, chatProvider);
-            },
-            child: const Row(
-              children: [
-                Icon(CupertinoIcons.smiley),
-                SizedBox(width: 12),
-                Text('React'),
-              ],
-            ),
-          ),
-          
-          // Edit option (only for current user's messages)
-          if (message.canEdit(currentUserId))
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                _showEditDialog(context, chatProvider);
-              },
-              child: const Row(
-                children: [
-                  Icon(CupertinoIcons.pencil),
-                  SizedBox(width: 12),
-                  Text('Edit'),
-                ],
-              ),
-            ),
-          
-          // Delete option (only for current user's messages)
-          if (message.canDelete(currentUserId))
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                _showDeleteConfirmation(context, chatProvider);
-              },
-              isDestructiveAction: true,
-              child: const Row(
-                children: [
-                  Icon(CupertinoIcons.trash),
-                  SizedBox(width: 12),
-                  Text('Delete'),
-                ],
-              ),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
+      builder: (context) => MessageOptionsModal(
+        message: widget.message,
+        isCurrentUser: widget.isCurrentUser,
+        currentUserId: currentUserId,
+        chatProvider: chatProvider,
+        onReply: widget.onReply,
+        onEdit: widget.onEdit,
       ),
     );
   }
 
-  void _showReactionPicker(BuildContext context, ChatProvider chatProvider) {
-    final reactions = ['👍', '❤️', '😂', '😮', '😢', '😡'];
-    
-    showCupertinoModalPopup(
-      context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: const Text('React to message'),
-        actions: reactions.map((emoji) => 
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              chatProvider.addReaction(message.id, emoji);
-            },
-            child: Text(
-              emoji,
-              style: const TextStyle(fontSize: 24),
-            ),
-          ),
-        ).toList(),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-      ),
-    );
-  }
-
-  void _showEditDialog(BuildContext context, ChatProvider chatProvider) {
-    final controller = TextEditingController(text: message.text);
-    
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Edit Message'),
-        content: Column(
-          children: [
-            const SizedBox(height: 16),
-            CupertinoTextField(
-              controller: controller,
-              placeholder: 'Enter new message',
-              maxLines: null,
-              autofocus: true,
-            ),
-          ],
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          CupertinoDialogAction(
-            child: const Text('Save'),
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                chatProvider.editMessage(message.id, controller.text.trim());
-              }
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(BuildContext context, ChatProvider chatProvider) {
-    showCupertinoDialog(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Delete Message'),
-        content: const Text('Are you sure you want to delete this message? This action cannot be undone.'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('Cancel'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('Delete'),
-            onPressed: () {
-              chatProvider.deleteMessage(message.id);
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
-    );
-  }
 }
