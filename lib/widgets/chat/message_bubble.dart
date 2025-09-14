@@ -13,6 +13,8 @@ class MessageBubble extends StatefulWidget {
   final bool isCurrentUser;
   final Function(Message)? onReply;
   final Function(Message)? onEdit;
+  final bool showSenderName;
+  final String? senderName;
 
   const MessageBubble({
     super.key,
@@ -20,6 +22,8 @@ class MessageBubble extends StatefulWidget {
     required this.isCurrentUser,
     this.onReply,
     this.onEdit,
+    this.showSenderName = false,
+    this.senderName,
   });
 
   @override
@@ -72,6 +76,24 @@ class _MessageBubbleState extends State<MessageBubble> {
                 ? CrossAxisAlignment.end 
                 : CrossAxisAlignment.start,
             children: [
+              // Optional sender name header (group chats)
+              if (widget.showSenderName && !widget.isCurrentUser)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: 4,
+                    right: 4,
+                    bottom: 4,
+                  ),
+                  child: Text(
+                    widget.senderName?.trim().isNotEmpty == true
+                        ? widget.senderName!.trim()
+                        : 'Unknown',
+                    style: AppConstants.caption.copyWith(
+                      color: CupertinoColors.secondaryLabel,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               // Reply preview if this is a reply
               if (widget.message.isReply) _buildReplyPreview(),
               

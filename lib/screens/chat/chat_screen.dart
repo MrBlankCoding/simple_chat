@@ -165,7 +165,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   
                   // Messages List
                   Expanded(
-                    child: _buildMessagesList(messages, currentUser.uid),
+                    child: _buildMessagesList(messages, currentUser.uid, chatProvider),
                   ),
                   
                   // Reply preview
@@ -297,7 +297,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildMessagesList(List<Message> messages, String currentUserId) {
+  Widget _buildMessagesList(List<Message> messages, String currentUserId, ChatProvider chatProvider) {
     if (messages.isEmpty) {
       return _buildEmptyState();
     }
@@ -334,6 +334,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   isCurrentUser: isCurrentUser,
                   onReply: _handleReply,
                   onEdit: _handleEdit,
+                  showSenderName: (_chat?.isGroup == true) && !isCurrentUser,
+                  senderName: chatProvider.getUser(message.senderId)?.name,
                 ),
               ],
             );
