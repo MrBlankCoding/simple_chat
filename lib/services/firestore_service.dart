@@ -11,63 +11,144 @@ class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = const Uuid();
 
+  // Optimization: Connection pooling and request deduplication
+  static final Map<String, Future<UserModel?>> _pendingUserRequests = {};
+  static final Map<String, Future<List<UserModel>>> _pendingSearchRequests = {};
+  static final Map<String, DateTime> _lastRequestTime = {};
+  static final Map<String, UserModel> _userCache = {};
+  static const Duration _requestDebounceTime = Duration(milliseconds: 100);
+  static const Duration _cacheValidityTime = Duration(minutes: 5);
+
   // User Operations
   Future<List<UserModel>> searchUsers(String query, String currentUserId) async {
     try {
-      // Search by name (case insensitive)
-      final nameQuery = await _firestore
-          .collection(AppConstants.usersCollection)
-          .where('name', isGreaterThanOrEqualTo: query)
-          .where('name', isLessThanOrEqualTo: '$query\uf8ff')
-          .limit(20)
-          .get();
-
-      // Search by email
-      final emailQuery = await _firestore
-          .collection(AppConstants.usersCollection)
-          .where('email', isGreaterThanOrEqualTo: query.toLowerCase())
-          .where('email', isLessThanOrEqualTo: '${query.toLowerCase()}\uf8ff')
-          .limit(20)
-          .get();
-
-      final Set<UserModel> users = {};
+      final cacheKey = 'search_${query.toLowerCase()}_$currentUserId';
       
-      // Add users from name search
-      for (var doc in nameQuery.docs) {
-        final user = UserModel.fromDocument(doc);
-        if (user.uid != currentUserId) {
-          users.add(user);
-        }
+      // Check if similar request is pending
+      if (_pendingSearchRequests.containsKey(cacheKey)) {
+        return await _pendingSearchRequests[cacheKey]!;
       }
       
-      // Add users from email search
-      for (var doc in emailQuery.docs) {
-        final user = UserModel.fromDocument(doc);
-        if (user.uid != currentUserId) {
-          users.add(user);
-        }
+      // Debounce rapid requests
+      final lastRequest = _lastRequestTime[cacheKey];
+      if (lastRequest != null && 
+          DateTime.now().difference(lastRequest) < _requestDebounceTime) {
+        return [];
       }
-
-      return users.toList();
+      
+      // Create pending request
+      _pendingSearchRequests[cacheKey] = _performUserSearch(query, currentUserId);
+      _lastRequestTime[cacheKey] = DateTime.now();
+      
+      try {
+        final result = await _pendingSearchRequests[cacheKey]!;
+        return result;
+      } finally {
+        _pendingSearchRequests.remove(cacheKey);
+      }
     } catch (e) {
+      _pendingSearchRequests.remove('search_${query.toLowerCase()}_$currentUserId');
       throw Exception('Failed to search users: ${e.toString()}');
     }
   }
 
+  Future<List<UserModel>> _performUserSearch(String query, String currentUserId) async {
+    // Optimization: Reduced search limits and smarter querying
+    const searchLimit = 10; // Reduced from 20
+    
+    // Search by name (case insensitive) with reduced limit
+    final nameQuery = await _firestore
+        .collection(AppConstants.usersCollection)
+        .where('name', isGreaterThanOrEqualTo: query)
+        .where('name', isLessThanOrEqualTo: '$query\uf8ff')
+        .limit(searchLimit)
+        .get();
+
+    // Only search by email if name search doesn't yield enough results
+    QuerySnapshot? emailQuery;
+    if (nameQuery.docs.length < searchLimit ~/ 2) {
+      emailQuery = await _firestore
+          .collection(AppConstants.usersCollection)
+          .where('email', isGreaterThanOrEqualTo: query.toLowerCase())
+          .where('email', isLessThanOrEqualTo: '${query.toLowerCase()}\uf8ff')
+          .limit(searchLimit - nameQuery.docs.length)
+          .get();
+    }
+
+    final Set<UserModel> users = {};
+    
+    // Add users from name search
+    for (var doc in nameQuery.docs) {
+      final user = UserModel.fromDocument(doc);
+      if (user.uid != currentUserId) {
+        users.add(user);
+        // Cache the user
+        _userCache[user.uid] = user;
+        _lastRequestTime['user_${user.uid}'] = DateTime.now();
+      }
+    }
+    
+    // Add users from email search if performed
+    if (emailQuery != null) {
+      for (var doc in emailQuery.docs) {
+        final user = UserModel.fromDocument(doc);
+        if (user.uid != currentUserId) {
+          users.add(user);
+          // Cache the user
+          _userCache[user.uid] = user;
+          _lastRequestTime['user_${user.uid}'] = DateTime.now();
+        }
+      }
+    }
+
+    return users.toList();
+  }
+
   Future<UserModel?> getUserById(String userId) async {
     try {
-      final doc = await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(userId)
-          .get();
-
-      if (doc.exists) {
-        return UserModel.fromDocument(doc);
+      // Check if request is already pending
+      if (_pendingUserRequests.containsKey(userId)) {
+        return await _pendingUserRequests[userId];
       }
-      return null;
+      
+      // Check cache first
+      final cachedUser = _userCache[userId];
+      final lastRequest = _lastRequestTime['user_$userId'];
+      if (cachedUser != null && 
+          lastRequest != null && 
+          DateTime.now().difference(lastRequest) < _cacheValidityTime) {
+        return cachedUser;
+      }
+      
+      // Create pending request
+      _pendingUserRequests[userId] = _fetchUserById(userId);
+      
+      try {
+        final user = await _pendingUserRequests[userId];
+        return user;
+      } finally {
+        _pendingUserRequests.remove(userId);
+      }
     } catch (e) {
+      _pendingUserRequests.remove(userId);
       throw Exception('Failed to get user: ${e.toString()}');
     }
+  }
+
+  Future<UserModel?> _fetchUserById(String userId) async {
+    final doc = await _firestore
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .get();
+
+    if (doc.exists) {
+      final user = UserModel.fromDocument(doc);
+      // Cache the user
+      _userCache[userId] = user;
+      _lastRequestTime['user_$userId'] = DateTime.now();
+      return user;
+    }
+    return null;
   }
 
   // Friend Request Operations
@@ -384,7 +465,7 @@ class FirestoreService {
     }
   }
 
-  Stream<List<Message>> getChatMessages(String chatId, {int limit = 20}) {
+  Stream<List<Message>> getChatMessages(String chatId, {int limit = 10}) { // Reduced default from 20
     return _firestore
         .collection(AppConstants.messagesCollection)
         .where('chatId', isEqualTo: chatId)
@@ -396,7 +477,6 @@ class FirestoreService {
             .toList());
   }
 
-  // Get paginated messages for a chat
   Future<List<Message>> getChatMessagesPaginated(
     String chatId, {
     int limit = 20,
@@ -420,11 +500,10 @@ class FirestoreService {
     }
   }
 
-  // Get messages after a specific timestamp (for real-time updates)
   Future<List<Message>> getMessagesAfter(
     String chatId,
     DateTime timestamp, {
-    int limit = 50,
+    int limit = 20, // Reduced from 50
   }) async {
     try {
       final snapshot = await _firestore
@@ -441,10 +520,9 @@ class FirestoreService {
     }
   }
 
-  // Get recent messages for initial load
   Future<List<Message>> getRecentMessages(
     String chatId, {
-    int limit = 20,
+    int limit = 15, // Reduced from 20
   }) async {
     try {
       final snapshot = await _firestore
@@ -468,12 +546,15 @@ class FirestoreService {
           .doc(chatId)
           .update({'unreadCount.$userId': 0});
 
-      // Mark messages as read
+      // Optimization: Limit the number of messages to mark as read
       final unreadMessages = await _firestore
           .collection(AppConstants.messagesCollection)
           .where('chatId', isEqualTo: chatId)
           .where('readBy', whereNotIn: [userId])
+          .limit(50) // Limit to prevent excessive batch operations
           .get();
+
+      if (unreadMessages.docs.isEmpty) return;
 
       final batch = _firestore.batch();
       for (var doc in unreadMessages.docs) {
@@ -491,210 +572,50 @@ class FirestoreService {
     }
   }
 
-  // Mark a single message as read (more efficient for individual messages)
+  // Mark a single message as read by a specific user (lightweight update)
   Future<void> markSingleMessageAsRead(String messageId, String userId) async {
     try {
-      await _firestore
+      final docRef = _firestore
           .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .update({
+          .doc(messageId);
+
+      await docRef.update({
         'readBy': FieldValue.arrayUnion([userId])
       });
     } catch (e) {
-      throw Exception('Failed to mark message as read: ${e.toString()}');
+      throw Exception('Failed to mark single message as read: ${e.toString()}');
     }
   }
 
-  // Edit message
-  Future<void> editMessage(String messageId, String newText, String userId) async {
-    try {
-      final messageDoc = await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .get();
-
-      if (!messageDoc.exists) {
-        throw Exception('Message not found');
-      }
-
-      final message = Message.fromDocument(messageDoc);
-      
-      // Check if user is the sender
-      if (message.senderId != userId) {
-        throw Exception('You can only edit your own messages');
-      }
-
-      // Check if message can still be edited (15 minute window)
-      if (!message.canEdit(userId)) {
-        throw Exception('Message can no longer be edited');
-      }
-
-      await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .update({
-        'text': newText,
-        'isEdited': true,
-        'editedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      throw Exception('Failed to edit message: ${e.toString()}');
-    }
-  }
-
-  // Delete message
-  Future<void> deleteMessage(String messageId, String userId) async {
-    try {
-      final messageDoc = await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .get();
-
-      if (!messageDoc.exists) {
-        throw Exception('Message not found');
-      }
-
-      final message = Message.fromDocument(messageDoc);
-      
-      // Check if user is the sender
-      if (message.senderId != userId) {
-        throw Exception('You can only delete your own messages');
-      }
-
-      // Mark as deleted instead of actually deleting to preserve chat history
-      await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .update({
-        'isDeleted': true,
-        'text': 'This message was deleted',
-      });
-    } catch (e) {
-      throw Exception('Failed to delete message: ${e.toString()}');
-    }
-  }
-
-  // Add reaction to message
-  Future<void> addReaction(String messageId, String emoji, String userId) async {
-    try {
-      final messageDoc = await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .get();
-
-      if (!messageDoc.exists) {
-        throw Exception('Message not found');
-      }
-
-      final message = Message.fromDocument(messageDoc);
-      final updatedMessage = message.addReaction(emoji, userId);
-
-      await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .update({'reactions': updatedMessage.reactions});
-    } catch (e) {
-      throw Exception('Failed to add reaction: ${e.toString()}');
-    }
-  }
-
-  // Remove reaction from message
-  Future<void> removeReaction(String messageId, String emoji, String userId) async {
-    try {
-      final messageDoc = await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .get();
-
-      if (!messageDoc.exists) {
-        throw Exception('Message not found');
-      }
-
-      final message = Message.fromDocument(messageDoc);
-      final updatedMessage = message.removeReaction(emoji, userId);
-
-      await _firestore
-          .collection(AppConstants.messagesCollection)
-          .doc(messageId)
-          .update({'reactions': updatedMessage.reactions});
-    } catch (e) {
-      throw Exception('Failed to remove reaction: ${e.toString()}');
-    }
-  }
-
-  // Delete chat
-  Future<void> deleteChat(String chatId, String userId) async {
-    try {
-      final chatDoc = await _firestore
-          .collection(AppConstants.chatsCollection)
-          .doc(chatId)
-          .get();
-
-      if (!chatDoc.exists) {
-        throw Exception('Chat not found');
-      }
-
-      final chat = Chat.fromDocument(chatDoc);
-      
-      // Check if user can delete the chat
-      if (!chat.canDelete(userId)) {
-        throw Exception('You cannot delete this chat');
-      }
-
-      // Mark chat as deleted instead of actually deleting
-      await _firestore
-          .collection(AppConstants.chatsCollection)
-          .doc(chatId)
-          .update({'isDeleted': true});
-    } catch (e) {
-      throw Exception('Failed to delete chat: ${e.toString()}');
-    }
-  }
-
-  // Pin/unpin chat
-  Future<void> pinChat(String chatId, String userId) async {
-    try {
-      final chatDoc = await _firestore
-          .collection(AppConstants.chatsCollection)
-          .doc(chatId)
-          .get();
-
-      if (!chatDoc.exists) {
-        throw Exception('Chat not found');
-      }
-
-      final chat = Chat.fromDocument(chatDoc);
-      final updatedChat = chat.togglePin(userId);
-
-      await _firestore
-          .collection(AppConstants.chatsCollection)
-          .doc(chatId)
-          .update({'pinnedBy': updatedChat.pinnedBy});
-    } catch (e) {
-      throw Exception('Failed to pin chat: ${e.toString()}');
-    }
-  }
-
-  // Mark chat as read
-  Future<void> markChatAsRead(String chatId, String userId) async {
-    try {
-      await markMessagesAsRead(chatId, userId);
-    } catch (e) {
-      throw Exception('Failed to mark chat as read: ${e.toString()}');
-    }
-  }
-
-  // Utility Methods
+  // Optimization: Batch user loading with smart caching
   Future<Map<String, UserModel>> getUsersMap(List<String> userIds) async {
     try {
       if (userIds.isEmpty) return {};
       
       final Map<String, UserModel> usersMap = {};
+      final List<String> usersToFetch = [];
+      final now = DateTime.now();
       
-      // Firestore 'in' queries are limited to 10 items
-      const batchSize = 10;
-      for (int i = 0; i < userIds.length; i += batchSize) {
-        final batch = userIds.skip(i).take(batchSize).toList();
+      // Check cache first
+      for (final userId in userIds) {
+        final cachedUser = _userCache[userId];
+        final lastRequest = _lastRequestTime['user_$userId'];
+        
+        if (cachedUser != null && 
+            lastRequest != null && 
+            now.difference(lastRequest) < _cacheValidityTime) {
+          usersMap[userId] = cachedUser;
+        } else {
+          usersToFetch.add(userId);
+        }
+      }
+      
+      if (usersToFetch.isEmpty) return usersMap;
+      
+      // Batch fetch remaining users with optimized queries
+      const batchSize = 10; // Firestore 'in' query limit
+      for (int i = 0; i < usersToFetch.length; i += batchSize) {
+        final batch = usersToFetch.skip(i).take(batchSize).toList();
         
         final snapshot = await _firestore
             .collection(AppConstants.usersCollection)
@@ -704,6 +625,10 @@ class FirestoreService {
         for (var doc in snapshot.docs) {
           final user = UserModel.fromDocument(doc);
           usersMap[user.uid] = user;
+          
+          // Update cache
+          _userCache[user.uid] = user;
+          _lastRequestTime['user_${user.uid}'] = now;
         }
       }
       
@@ -729,6 +654,152 @@ class FirestoreService {
       return usersMap;
     } catch (e) {
       throw Exception('Failed to get users with status: ${e.toString()}');
+    }
+  }
+
+  // Optimization: Cache cleanup utility
+  static void clearCache() {
+    _userCache.clear();
+    _lastRequestTime.clear();
+    _pendingUserRequests.clear();
+    _pendingSearchRequests.clear();
+  }
+
+  // Optimization: Preload users efficiently
+  static void preloadUsers(Map<String, UserModel> users) {
+    final now = DateTime.now();
+    for (final entry in users.entries) {
+      _userCache[entry.key] = entry.value;
+      _lastRequestTime['user_${entry.key}'] = now;
+    }
+  }
+
+  // Message management: delete a message (soft delete by sender only)
+  Future<void> deleteMessage(String messageId, String userId) async {
+    try {
+      final docRef = _firestore.collection(AppConstants.messagesCollection).doc(messageId);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        throw Exception('Message not found');
+      }
+      final message = Message.fromDocument(doc);
+      if (message.senderId != userId) {
+        throw Exception('Not authorized to delete this message');
+      }
+
+      await docRef.update({
+        'isDeleted': true,
+        'text': '[deleted]',
+        'isEdited': true,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to delete message: ${e.toString()}');
+    }
+  }
+
+  // Message management: edit a message (by sender within 15 minutes)
+  Future<void> editMessage(String messageId, String newText, String userId) async {
+    try {
+      final docRef = _firestore.collection(AppConstants.messagesCollection).doc(messageId);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        throw Exception('Message not found');
+      }
+      final message = Message.fromDocument(doc);
+      if (message.senderId != userId) {
+        throw Exception('Not authorized to edit this message');
+      }
+      if (message.isDeleted) {
+        throw Exception('Cannot edit a deleted message');
+      }
+      // Enforce 15-minute edit window similar to model's canEdit
+      final diff = DateTime.now().difference(message.timestamp);
+      if (diff.inMinutes > 15) {
+        throw Exception('Edit window expired');
+      }
+
+      await docRef.update({
+        'text': newText,
+        'isEdited': true,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Failed to edit message: ${e.toString()}');
+    }
+  }
+
+  // Reactions: add emoji reaction by user
+  Future<void> addReaction(String messageId, String emoji, String userId) async {
+    try {
+      final docRef = _firestore.collection(AppConstants.messagesCollection).doc(messageId);
+      await docRef.update({
+        'reactions.$emoji': FieldValue.arrayUnion([userId])
+      });
+    } catch (e) {
+      throw Exception('Failed to add reaction: ${e.toString()}');
+    }
+  }
+
+  // Reactions: remove emoji reaction by user
+  Future<void> removeReaction(String messageId, String emoji, String userId) async {
+    try {
+      final docRef = _firestore.collection(AppConstants.messagesCollection).doc(messageId);
+      await docRef.update({
+        'reactions.$emoji': FieldValue.arrayRemove([userId])
+      });
+      // Optional: could clean up empty reaction arrays by reading doc and removing key
+    } catch (e) {
+      throw Exception('Failed to remove reaction: ${e.toString()}');
+    }
+  }
+
+  // Chat management: soft delete chat (mark as deleted) – requires participant
+  Future<void> deleteChat(String chatId, String userId) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) {
+        throw Exception('Chat not found');
+      }
+      final chat = Chat.fromDocument(chatDoc);
+      if (!chat.participants.contains(userId)) {
+        throw Exception('Not authorized to delete this chat');
+      }
+
+      await chatRef.update({'isDeleted': true});
+    } catch (e) {
+      throw Exception('Failed to delete chat: ${e.toString()}');
+    }
+  }
+
+  // Chat management: toggle pin for a user
+  Future<void> pinChat(String chatId, String userId) async {
+    try {
+      final chatRef = _firestore.collection(AppConstants.chatsCollection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      if (!chatDoc.exists) {
+        throw Exception('Chat not found');
+      }
+      final chat = Chat.fromDocument(chatDoc);
+      final current = (chat.pinnedBy[userId] ?? false);
+      await chatRef.update({
+        'pinnedBy.$userId': !current,
+      });
+    } catch (e) {
+      throw Exception('Failed to pin/unpin chat: ${e.toString()}');
+    }
+  }
+
+  // Chat management: mark chat as read for a user (lightweight)
+  Future<void> markChatAsRead(String chatId, String userId) async {
+    try {
+      await _firestore
+          .collection(AppConstants.chatsCollection)
+          .doc(chatId)
+          .update({'unreadCount.$userId': 0});
+    } catch (e) {
+      throw Exception('Failed to mark chat as read: ${e.toString()}');
     }
   }
 }

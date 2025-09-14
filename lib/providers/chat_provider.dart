@@ -34,17 +34,16 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, DocumentSnapshot?> _lastDocument = {};
   static const int _messagesPerPage = 20;
 
-  List<Chat> get chats => _chats;
-  Map<String, List<Message>> get chatMessages => _chatMessages;
-  Map<String, UserModel> get users => _users;
-  Map<String, List<String>> get typingUsers => _typingUsers;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  // Optimization: Connection pooling and request deduplication
+  final Map<String, Future<UserModel?>> _pendingUserRequests = {};
+  final Map<String, Timer> _subscriptionTimers = {};
+  final Set<String> _activeSubscriptions = {};
+  Timer? _batchUserLoadTimer;
+  final Set<String> _pendingUserIds = {};
   
-  // Pagination getters
-  bool isLoadingMoreMessages(String chatId) => _isLoadingMoreMessages[chatId] ?? false;
-  bool hasMoreMessages(String chatId) => _hasMoreMessages[chatId] ?? true;
-  int getCurrentPage(String chatId) => _currentPage[chatId] ?? 0;
+  // Optimization: Reduced subscription limits
+  static const int _realtimeMessageLimit = 10; // Reduced from 50
+  static const int _maxActiveSubscriptions = 3; // Limit concurrent subscriptions
 
   ChatProvider() {
     _initializeChats();
@@ -78,12 +77,16 @@ class ChatProvider extends ChangeNotifier {
             _errorService.logError('Failed to cache chats', error: e);
           }
           
-          // Load user data for each chat (with improved error handling)
+          // Optimization: Batch load user data instead of individual requests
+          final allParticipantIds = <String>{};
           for (final chat in validChats) {
-            // Check if still subscribed before continuing
-            if (_chatsSubscription == null) return;
-            
-            await _loadChatParticipants(chat);
+            allParticipantIds.addAll(chat.participants);
+          }
+          
+          // Remove already loaded users
+          final usersToLoad = allParticipantIds.where((id) => !_users.containsKey(id)).toList();
+          if (usersToLoad.isNotEmpty) {
+            await _batchLoadUsers(usersToLoad);
           }
           
           // Only notify listeners if still subscribed
@@ -153,6 +156,23 @@ class ChatProvider extends ChangeNotifier {
   }
 
   Future<void> _loadUserWithCache(String userId) async {
+    // Deduplication: Check if request is already pending
+    if (_pendingUserRequests.containsKey(userId)) {
+      await _pendingUserRequests[userId];
+      return;
+    }
+    
+    try {
+      // Create pending request
+      _pendingUserRequests[userId] = _loadUserWithCacheInternal(userId);
+      await _pendingUserRequests[userId];
+    } finally {
+      // Clean up pending request
+      _pendingUserRequests.remove(userId);
+    }
+  }
+  
+  Future<UserModel?> _loadUserWithCacheInternal(String userId) async {
     try {
       // Try to load from cache first
       final cachedUser = await _cacheService.getCachedUser(userId);
@@ -165,16 +185,18 @@ class ChatProvider extends ChangeNotifier {
         if (lastSync == null || DateTime.now().difference(lastSync).inHours > 1) {
           _loadUserFromServer(userId);
         }
+        return cachedUser;
       } else {
         // No cache, load from server
-        await _loadUserFromServer(userId);
+        return await _loadUserFromServer(userId);
       }
     } catch (e) {
       _errorService.logError('Failed to load user with cache $userId', error: e);
+      return null;
     }
   }
 
-  Future<void> _loadUserFromServer(String userId) async {
+  Future<UserModel?> _loadUserFromServer(String userId) async {
     try {
       final user = await _firestoreService.getUserById(userId);
       if (user != null) {
@@ -188,9 +210,12 @@ class ChatProvider extends ChangeNotifier {
         await _cacheService.cacheUserOnlineStatus(userId, user.isOnline, user.lastSeen);
         
         notifyListeners();
+        return user;
       }
+      return null;
     } catch (e) {
       _errorService.logError('Failed to load user from server $userId', error: e);
+      return null;
     }
   }
 
@@ -212,12 +237,20 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void subscribeToChat(String chatId) {
+    // Optimization: Limit concurrent subscriptions
+    if (_activeSubscriptions.length >= _maxActiveSubscriptions && !_activeSubscriptions.contains(chatId)) {
+      // Unsubscribe from oldest chat if at limit
+      final oldestChatId = _activeSubscriptions.first;
+      unsubscribeFromChat(oldestChatId);
+    }
+    
     if (_messageSubscriptions.containsKey(chatId)) return;
 
     // Initialize pagination state
     _currentPage[chatId] = 0;
     _hasMoreMessages[chatId] = true;
     _isLoadingMoreMessages[chatId] = false;
+    _activeSubscriptions.add(chatId);
 
     // Load cached messages first
     _loadCachedMessages(chatId);
@@ -225,7 +258,7 @@ class ChatProvider extends ChangeNotifier {
     // Load initial messages with pagination
     _loadInitialMessages(chatId);
 
-    // Subscribe to real-time updates for new messages only
+    // Subscribe to real-time updates for new messages only (with reduced limit)
     _subscribeToNewMessages(chatId);
   }
 
@@ -280,39 +313,48 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _subscribeToNewMessages(String chatId) {
-    // Subscribe to real-time updates for all messages in the chat
+    // Optimization: Reduced real-time subscription limit and smarter filtering
     _messageSubscriptions[chatId] = _firestoreService
-        .getChatMessages(chatId, limit: 50) // Increased limit to catch more changes
+        .getChatMessages(chatId, limit: _realtimeMessageLimit) // Reduced from 50 to 10
         .listen(
       (updatedMessages) {
         if (updatedMessages.isEmpty) return;
         
         final existingMessages = _chatMessages[chatId] ?? [];
         
-        // Update existing messages and add new ones
-        final allMessagesMap = <String, Message>{};
+        // Optimization: Only process truly new messages
+        final existingMessageIds = existingMessages.map((m) => m.id).toSet();
+        final newMessages = updatedMessages.where((m) => !existingMessageIds.contains(m.id)).toList();
         
-        // Add all updated messages from stream
-        for (var message in updatedMessages) {
-          allMessagesMap[message.id] = message;
-        }
-        
-        // Add remaining existing messages that weren't in the stream
-        for (var message in existingMessages) {
-          if (!allMessagesMap.containsKey(message.id)) {
-            allMessagesMap[message.id] = message;
-          }
-        }
-        
-        // Convert back to list and sort
-        final allMessages = allMessagesMap.values.toList();
-        allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        
-        // Check if there are actual changes before updating
-        if (_hasMessagesChanged(existingMessages, allMessages)) {
-          _chatMessages[chatId] = allMessages;
+        if (newMessages.isEmpty && existingMessages.isNotEmpty) {
+          // Check for updates to existing messages (read status, edits, etc.)
+          bool hasUpdates = false;
+          final updatedMessagesMap = {for (var m in updatedMessages) m.id: m};
           
-          // Cache the updated messages
+          for (int i = 0; i < existingMessages.length && i < _realtimeMessageLimit; i++) {
+            final existingMsg = existingMessages[i];
+            final updatedMsg = updatedMessagesMap[existingMsg.id];
+            
+            if (updatedMsg != null && _hasMessageChanged(existingMsg, updatedMsg)) {
+              existingMessages[i] = updatedMsg;
+              hasUpdates = true;
+            }
+          }
+          
+          if (hasUpdates) {
+            _chatMessages[chatId] = existingMessages;
+            _cacheMessages(chatId, existingMessages);
+            notifyListeners();
+          }
+          return;
+        }
+        
+        // Add new messages
+        if (newMessages.isNotEmpty) {
+          final allMessages = [...newMessages, ...existingMessages];
+          allMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          
+          _chatMessages[chatId] = allMessages;
           _cacheMessages(chatId, allMessages);
           notifyListeners();
         }
@@ -324,24 +366,12 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
-  bool _hasMessagesChanged(List<Message> oldMessages, List<Message> newMessages) {
-    if (oldMessages.length != newMessages.length) return true;
-    
-    for (int i = 0; i < oldMessages.length; i++) {
-      final oldMsg = oldMessages[i];
-      final newMsg = newMessages[i];
-      
-      // Check if message content, read status, or edit status changed
-      if (oldMsg.id != newMsg.id ||
-          oldMsg.text != newMsg.text ||
-          oldMsg.isEdited != newMsg.isEdited ||
-          oldMsg.isDeleted != newMsg.isDeleted ||
-          !_listEquals(oldMsg.readBy, newMsg.readBy)) {
-        return true;
-      }
-    }
-    
-    return false;
+  bool _hasMessageChanged(Message oldMsg, Message newMsg) {
+    return oldMsg.text != newMsg.text ||
+           oldMsg.isEdited != newMsg.isEdited ||
+           oldMsg.isDeleted != newMsg.isDeleted ||
+           !_listEquals(oldMsg.readBy, newMsg.readBy) ||
+           oldMsg.reactions.toString() != newMsg.reactions.toString();
   }
 
   bool _listEquals(List<String> list1, List<String> list2) {
@@ -419,13 +449,20 @@ class ChatProvider extends ChangeNotifier {
   void unsubscribeFromChat(String chatId) {
     _messageSubscriptions[chatId]?.cancel();
     _messageSubscriptions.remove(chatId);
-    _chatMessages.remove(chatId);
+    _activeSubscriptions.remove(chatId);
+    
+    // Optimization: Don't immediately remove messages, keep them cached
+    // _chatMessages.remove(chatId); // Commented out to maintain cache
     
     // Clean up pagination state
     _isLoadingMoreMessages.remove(chatId);
     _hasMoreMessages.remove(chatId);
     _currentPage.remove(chatId);
     _lastDocument.remove(chatId);
+    
+    // Cancel any pending timers
+    _subscriptionTimers[chatId]?.cancel();
+    _subscriptionTimers.remove(chatId);
   }
 
   Future<String> getOrCreateDirectChat(String otherUserId) async {
@@ -760,6 +797,13 @@ class ChatProvider extends ChangeNotifier {
     return total;
   }
 
+  // Public getters for UI consumption
+  List<Chat> get chats => _chats;
+  bool get isLoading => _isLoading;
+
+  bool hasMoreMessages(String chatId) => _hasMoreMessages[chatId] ?? true;
+  bool isLoadingMoreMessages(String chatId) => _isLoadingMoreMessages[chatId] ?? false;
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
@@ -804,6 +848,45 @@ class ChatProvider extends ChangeNotifier {
     await Future.wait(futures);
   }
 
+  // Optimization: Batch load user data instead of individual requests
+  Future<void> _batchLoadUsers(List<String> userIds) async {
+    if (userIds.isEmpty) return;
+    
+    try {
+      // Check cache first for all users
+      final Map<String, UserModel> cachedUsers = {};
+      final List<String> usersToFetch = [];
+      
+      for (final userId in userIds) {
+        final cachedUser = await _cacheService.getCachedUser(userId);
+        if (cachedUser != null) {
+          cachedUsers[userId] = cachedUser;
+          _users[userId] = cachedUser;
+        } else {
+          usersToFetch.add(userId);
+        }
+      }
+      
+      // Batch fetch remaining users from server
+      if (usersToFetch.isNotEmpty) {
+        final fetchedUsers = await _firestoreService.getUsersMap(usersToFetch);
+        
+        // Update local state and cache
+        for (final entry in fetchedUsers.entries) {
+          _users[entry.key] = entry.value;
+          await _cacheService.cacheUser(entry.value);
+          await _cacheService.setLastSyncTime('user_${entry.key}', DateTime.now());
+        }
+      }
+      
+      if (cachedUsers.isNotEmpty || usersToFetch.isNotEmpty) {
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorService.logError('Failed to batch load users', error: e);
+    }
+  }
+
   @override
   void dispose() {
     // Cancel all subscriptions safely
@@ -824,6 +907,16 @@ class ChatProvider extends ChangeNotifier {
     
     // Dispose typing service
     _typingService.dispose();
+    
+    // Clean up optimization timers and pending requests
+    _batchUserLoadTimer?.cancel();
+    for (final timer in _subscriptionTimers.values) {
+      timer.cancel();
+    }
+    _subscriptionTimers.clear();
+    _pendingUserRequests.clear();
+    _activeSubscriptions.clear();
+    _pendingUserIds.clear();
     
     // Clean up pagination state
     _isLoadingMoreMessages.clear();

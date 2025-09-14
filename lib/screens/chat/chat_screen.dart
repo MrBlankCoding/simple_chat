@@ -215,7 +215,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           height: 32,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppConstants.primaryColor.withOpacity(0.1),
+            color: AppConstants.primaryColor.withValues(alpha: 0.1),
           ),
           child: chatImageUrl != null && chatImageUrl.isNotEmpty
               ? ClipOval(
@@ -261,7 +261,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       height: 32,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppConstants.primaryColor.withOpacity(0.2),
+        color: AppConstants.primaryColor.withValues(alpha: 0.2),
       ),
       child: Center(
         child: Text(
@@ -356,7 +356,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppConstants.primaryColor.withOpacity(0.1),
+                color: AppConstants.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
