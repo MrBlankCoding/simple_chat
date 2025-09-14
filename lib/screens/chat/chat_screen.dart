@@ -43,9 +43,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeChat();
-    });
+    // Initialize the chat immediately so the header has data before first build
+    _initializeChat();
   }
 
   @override
@@ -79,7 +78,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     chatProvider.subscribeToChat(widget.chatId);
     
     // Find the chat in the provider
-    _currentChat = chatProvider.chats.firstWhere(
+    final foundChat = chatProvider.chats.firstWhere(
       (chat) => chat.id == widget.chatId,
       orElse: () => Chat(
         id: widget.chatId,
@@ -88,6 +87,33 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         createdBy: '',
       ),
     );
+
+    // Set current chat and trigger rebuild if needed
+    setState(() {
+      _currentChat = foundChat;
+    });
+
+    // Preload participant user profiles to populate title and avatars quickly
+    if (foundChat.participants.isNotEmpty) {
+      chatProvider.preloadUsers(foundChat.participants);
+    }
+
+    // Also refresh the chat from server to ensure we have latest participants/group info
+    chatProvider.refreshChat(widget.chatId).then((_) {
+      if (!mounted || _isDisposed) return;
+      final refreshed = chatProvider.chats.firstWhere(
+        (c) => c.id == widget.chatId,
+        orElse: () => _currentChat ?? foundChat,
+      );
+      if (refreshed.id == _currentChat?.id && refreshed != _currentChat) {
+        setState(() {
+          _currentChat = refreshed;
+        });
+        if (refreshed.participants.isNotEmpty) {
+          chatProvider.preloadUsers(refreshed.participants);
+        }
+      }
+    });
     
     // Mark messages as read
     chatProvider.markMessagesAsRead(widget.chatId);
