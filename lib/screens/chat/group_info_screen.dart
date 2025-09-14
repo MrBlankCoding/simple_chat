@@ -113,14 +113,14 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
               height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppConstants.primaryColor.withValues(alpha: 0.1),
+                color: AppConstants.primaryColor.withOpacity(0.1),
               ),
               clipBehavior: Clip.antiAlias,
               child: imageUrl != null && imageUrl.isNotEmpty
                   ? Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _defaultAvatar(chat),
+                      errorBuilder: (context, error, stackTrace) => _defaultAvatar(chat),
                     )
                   : _defaultAvatar(chat),
             ),
@@ -130,7 +130,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
                 bottom: 0,
                 child: CupertinoButton(
                   padding: EdgeInsets.zero,
-                  minSize: 28,
+                  minimumSize: const Size.square(28),
                   onPressed: _pickNewImage,
                   child: Container(
                     width: 28,
@@ -204,7 +204,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
           style: AppConstants.bodyMedium.copyWith(color: CupertinoColors.secondaryLabel, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: AppConstants.paddingMedium),
-        ...members.map((uid) => _buildMemberTile(chatProvider, chat, uid, isAdmin, currentUserId)).toList(),
+        ...members.map((uid) => _buildMemberTile(chatProvider, chat, uid, isAdmin, currentUserId)),
       ],
     );
   }
@@ -229,7 +229,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             height: 36,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppConstants.primaryColor.withValues(alpha: 0.1),
+              color: AppConstants.primaryColor.withOpacity(0.1),
             ),
             clipBehavior: Clip.antiAlias,
             child: (user?.profileImageUrl?.isNotEmpty == true)
@@ -309,6 +309,7 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     try {
       final file = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1024, maxHeight: 1024, imageQuality: 80);
       if (file != null) {
+        if (!mounted) return;
         setState(() => _isSaving = true);
         final chatProvider = Provider.of<ChatProvider>(context, listen: false);
         await chatProvider.updateGroupInfo(widget.chatId, newImageFile: file);
@@ -372,7 +373,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
             onPressed: () async {
               Navigator.of(context).pop();
               await chatProvider.leaveGroup(chatId);
-              if (mounted) Navigator.of(context).pop();
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
             },
             child: const Text('Leave'),
           ),
@@ -388,9 +390,9 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
     if (candidates.isEmpty) {
       showCupertinoDialog(
         context: context,
-        builder: (_) => const CupertinoAlertDialog(
-          title: Text('No friends to add'),
-          content: Text('All your friends are already in this group.'),
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('No friends to add'),
+          content: const Text('All your friends are already in this group.'),
         ),
       );
       await Future.delayed(const Duration(seconds: 1));
@@ -398,10 +400,8 @@ class _GroupInfoScreenState extends State<GroupInfoScreen> {
       return;
     }
 
-    final selected = <String>{};
-
     await Navigator.of(context).push(CupertinoPageRoute(
-      builder: (_) => _SelectUsersPage(
+      builder: (context) => _SelectUsersPage(
         title: 'Add Members',
         users: candidates,
         onConfirm: (ids) async {
@@ -468,7 +468,8 @@ class _SelectUsersPageState extends State<_SelectUsersPage> {
               ? null
               : () async {
                   await widget.onConfirm(_selected.toList());
-                  if (mounted) Navigator.of(context).pop();
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
                 },
           child: const Text('Add'),
         ),
@@ -476,7 +477,7 @@ class _SelectUsersPageState extends State<_SelectUsersPage> {
       child: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.all(AppConstants.paddingLarge),
-          itemBuilder: (_, i) {
+          itemBuilder: (context, i) {
             final user = widget.users[i];
             final isSelected = _selected.contains(user.uid);
             return GestureDetector(
@@ -494,7 +495,6 @@ class _SelectUsersPageState extends State<_SelectUsersPage> {
                 decoration: BoxDecoration(
                   color: AppConstants.surfaceColor,
                   borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
-                  border: isSelected ? Border.all(color: AppConstants.primaryColor, width: 2) : null,
                 ),
                 child: Row(
                   children: [
@@ -503,7 +503,7 @@ class _SelectUsersPageState extends State<_SelectUsersPage> {
                       height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppConstants.primaryColor.withValues(alpha: 0.1),
+                        color: AppConstants.primaryColor.withOpacity(0.1),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: (user.profileImageUrl?.isNotEmpty == true)
@@ -523,14 +523,12 @@ class _SelectUsersPageState extends State<_SelectUsersPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isSelected)
-                      const Icon(CupertinoIcons.checkmark_circle_fill, color: AppConstants.primaryColor),
                   ],
                 ),
               ),
             );
           },
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
           itemCount: widget.users.length,
         ),
       ),

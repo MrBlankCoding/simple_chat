@@ -230,19 +230,6 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadChatParticipants(Chat chat) async {
-    try {
-      for (final participantId in chat.participants) {
-        if (participantId.isNotEmpty && !_users.containsKey(participantId)) {
-          // Load user with cache-first approach
-          await _loadUserWithCache(participantId);
-        }
-      }
-    } catch (e) {
-      _errorService.logError('Failed to load chat participants for ${chat.id}', error: e);
-    }
-  }
-
   List<Message> getChatMessages(String chatId) {
     return _chatMessages[chatId] ?? [];
   }
@@ -745,8 +732,9 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> markMessageAsRead(String messageId, String chatId) async {
     try {
-      final currentUserId = _chatService.currentUserId ?? '';
-      
+      final currentUserId = _chatService.currentUserId;
+      if (currentUserId == null) return;
+       
       // Check if message is already marked as read locally to avoid duplicate calls
       if (_chatMessages.containsKey(chatId)) {
         final messages = _chatMessages[chatId]!;
@@ -763,7 +751,7 @@ class ChatProvider extends ChangeNotifier {
           notifyListeners();
         }
       }
-      
+       
       // Use the more efficient single message update
       await _firestoreService.markSingleMessageAsRead(messageId, currentUserId);
     } catch (e) {
@@ -815,6 +803,7 @@ class ChatProvider extends ChangeNotifier {
   // Public getters for UI consumption
   List<Chat> get chats => _chats;
   bool get isLoading => _isLoading;
+  String? get error => _error;
 
   bool hasMoreMessages(String chatId) => _hasMoreMessages[chatId] ?? true;
   bool isLoadingMoreMessages(String chatId) => _isLoadingMoreMessages[chatId] ?? false;
@@ -940,15 +929,12 @@ class ChatProvider extends ChangeNotifier {
     try {
       // Optimistically update local state
       final idx = _chats.indexWhere((c) => c.id == chatId);
-      String? oldName;
-      String? oldImage;
       if (idx != -1) {
         final chat = _chats[idx];
-        oldName = chat.groupName;
-        oldImage = chat.groupImageUrl;
         _chats[idx] = chat.copyWith(
           groupName: newGroupName ?? chat.groupName,
-          groupImageUrl: newImageFile != null ? chat.groupImageUrl : chat.groupImageUrl,
+          // Keep existing image URL locally; server refresh will update if image changes
+          groupImageUrl: chat.groupImageUrl,
         );
         notifyListeners();
       }
@@ -1028,7 +1014,7 @@ class ChatProvider extends ChangeNotifier {
   // Group management: leave group (non-admin)
   Future<void> leaveGroup(String chatId) async {
     try {
-      final uid = currentUserId;
+      final uid = _chatService.currentUserId;
       if (uid == null) return;
 
       // Optimistic: remove current user
@@ -1072,7 +1058,7 @@ class ChatProvider extends ChangeNotifier {
 
   // Helpers
   String? get currentUserId => _chatService.currentUserId;
-  bool isAdmin(Chat chat) => currentUserId != null && chat.createdBy == currentUserId;
+  bool isAdmin(Chat chat) => _chatService.currentUserId != null && chat.createdBy == _chatService.currentUserId;
 
   // Handle push notifications for new messages
   Future<void> _handleNewMessageNotifications(String chatId, List<Message> newMessages) async {
@@ -1084,6 +1070,7 @@ class ChatProvider extends ChangeNotifier {
         id: chatId,
         participants: [],
         createdAt: DateTime.now(),
+        createdBy: currentUserId,
         lastMessage: null,
         lastMessageTime: DateTime.now(),
       ));
@@ -1099,8 +1086,8 @@ class ChatProvider extends ChangeNotifier {
         String notificationTitle;
         String notificationBody;
 
-        if (chat.isGroupChat) {
-          notificationTitle = chat.name ?? 'Group Chat';
+        if (chat.isGroup) {
+          notificationTitle = chat.groupName ?? 'Group Chat';
           notificationBody = '${sender.name}: ${_getMessagePreview(message)}';
         } else {
           notificationTitle = sender.name;
@@ -1122,7 +1109,7 @@ class ChatProvider extends ChangeNotifier {
         );
       }
     } catch (e) {
-      print('Error handling new message notifications: $e');
+      _errorService.logError('Error handling new message notifications', error: e);
     }
   }
 
@@ -1135,10 +1122,8 @@ class ChatProvider extends ChangeNotifier {
             : message.text;
       case MessageType.image:
         return '📷 Photo';
-      case MessageType.file:
-        return '📎 File';
-      default:
-        return 'New message';
+      case MessageType.system:
+        return '🔔 System message';
     }
   }
 

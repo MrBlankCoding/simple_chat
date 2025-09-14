@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firestore_service.dart';
 import 'auth_service.dart';
@@ -41,6 +39,9 @@ class NotificationService {
 
       // Set up Firebase messaging
       await _setupFirebaseMessaging();
+
+      // iOS/macOS: Ensure APNs token is available before requesting FCM token
+      await _ensureApnsToken();
 
       // Get and store FCM token
       await _handleTokenRefresh();
@@ -85,6 +86,15 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+
+    // Ensure iOS shows notifications while app is in foreground if desired
+    try {
+      await _firebaseMessaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (_) {}
   }
 
   // Handle notification tap
@@ -105,12 +115,6 @@ class NotificationService {
         print('Error parsing notification payload: $e');
       }
     }
-  }
-
-  // Navigate to chat (to be implemented with navigation context)
-  void _navigateToChat(String chatId) {
-    // This will be called from the main app with proper navigation context
-    print('Should navigate to chat: $chatId');
   }
 
   // Set up Firebase messaging handlers
@@ -182,7 +186,7 @@ class NotificationService {
   // Handle token refresh
   Future<void> _handleTokenRefresh() async {
     try {
-      final token = await _firebaseMessaging.getToken();
+      final token = await _safeGetFcmToken();
       if (token != null) {
         await _onTokenRefresh(token);
       }
@@ -215,7 +219,7 @@ class NotificationService {
     if (_currentToken != null) return _currentToken;
     
     try {
-      _currentToken = await _firebaseMessaging.getToken();
+      _currentToken = await _safeGetFcmToken();
       return _currentToken;
     } catch (e) {
       print('Error getting current FCM token: $e');
@@ -232,7 +236,7 @@ class NotificationService {
   }) async {
     try {
       // Get recipient's FCM token
-      final recipientUser = await _firestoreService.getUser(recipientUserId);
+      final recipientUser = await _firestoreService.getUserById(recipientUserId);
       if (recipientUser?.fcmToken == null) {
         print('Recipient has no FCM token');
         return;
@@ -313,5 +317,51 @@ class NotificationService {
 
   void _navigateToChat(String chatId) {
     _navigationCallback?.call(chatId);
+  }
+
+  // iOS/macOS: Ensure APNs token is present before requesting FCM token
+  Future<void> _ensureApnsToken({Duration timeout = const Duration(seconds: 10)}) async {
+    try {
+      if (!(Platform.isIOS || Platform.isMacOS)) return;
+
+      // If APNs token already available, we're good
+      String? apnsToken = await _firebaseMessaging.getAPNSToken();
+      if (apnsToken != null) {
+        print('APNs token already available');
+        return;
+      }
+
+      // Make sure auto init is enabled
+      try { await _firebaseMessaging.setAutoInitEnabled(true); } catch (_) {}
+
+      // Poll until APNs token becomes available or timeout
+      final start = DateTime.now();
+      while (DateTime.now().difference(start) < timeout) {
+        apnsToken = await _firebaseMessaging.getAPNSToken();
+        if (apnsToken != null) {
+          print('Obtained APNs token');
+          return;
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
+      print('APNs token not available within timeout');
+    } catch (e) {
+      // Swallow errors; we'll attempt to fetch FCM token and handle failures gracefully
+      print('Error ensuring APNs token: $e');
+    }
+  }
+
+  // Safely get FCM token, waiting for APNs token on iOS/macOS to avoid errors
+  Future<String?> _safeGetFcmToken() async {
+    if (Platform.isIOS || Platform.isMacOS) {
+      await _ensureApnsToken();
+    }
+    try {
+      return await _firebaseMessaging.getToken();
+    } catch (e) {
+      print('getToken failed: $e');
+      return null;
+    }
   }
 }
