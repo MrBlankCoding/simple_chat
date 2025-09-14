@@ -2,8 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 import '../../providers/friend_provider.dart';
 import '../../providers/chat_provider.dart';
+import '../../providers/theme_provider.dart';
 import '../../utils/constants.dart';
 import '../../widgets/friend/friend_list_item.dart';
+import '../../screens/friends/search_users_screen.dart';
 
 class FriendsListTab extends StatelessWidget {
   const FriendsListTab({super.key});
@@ -58,6 +60,7 @@ class FriendsListTab extends StatelessWidget {
             return FriendListItem(
               user: friend,
               onTap: () => _startChat(context, friend.uid),
+              onLongPress: () => _confirmUnfriend(context, friend.uid, friend.name),
             );
           },
         );
@@ -107,7 +110,7 @@ class FriendsListTab extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: AppConstants.primaryColor.withOpacity(0.1),
+                color: AppConstants.primaryColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -134,11 +137,62 @@ class FriendsListTab extends StatelessWidget {
             const SizedBox(height: AppConstants.paddingXLarge),
             CupertinoButton.filled(
               onPressed: () {
-                Navigator.of(context).pushNamed('/search-users');
+                Navigator.push(
+                  context,
+                  CupertinoPageRoute(builder: (context) => const SearchUsersScreen()),
+                );
               },
               child: const Text('Find Friends'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmUnfriend(BuildContext context, String friendUserId, String friendName) async {
+    final theme = Provider.of<ThemeProvider>(context, listen: false).currentTheme;
+    await showCupertinoModalPopup(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(
+          'Remove Friend',
+          style: AppConstants.titleMedium.copyWith(color: theme.textPrimary),
+        ),
+        message: Text(
+          'Do you want to remove $friendName from your friends? You will also be removed from their list.',
+          style: AppConstants.bodyMedium.copyWith(color: theme.textSecondary),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final friendProvider = Provider.of<FriendProvider>(context, listen: false);
+              final success = await friendProvider.unfriend(friendUserId);
+              if (!success && context.mounted) {
+                showCupertinoDialog(
+                  context: context,
+                  builder: (context) => CupertinoAlertDialog(
+                    title: const Text('Error'),
+                    content: const Text('Failed to remove friend. Please try again.'),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: const Text('OK'),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            isDestructiveAction: true,
+            child: const Text('Remove Friend'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(ctx).pop(),
+          isDefaultAction: true,
+          child: const Text('Cancel'),
         ),
       ),
     );

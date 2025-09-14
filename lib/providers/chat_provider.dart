@@ -477,6 +477,19 @@ class ChatProvider extends ChangeNotifier {
       // Don't set loading state for message sending to avoid UI freeze
       await _chatService.sendTextMessage(chatId, text, replyToMessageId: replyToMessageId);
       
+      // Optimistically ensure unread count is zero for the sender while in chat
+      final currentUserId = _chatService.currentUserId;
+      if (currentUserId != null) {
+        final chatIndex = _chats.indexWhere((c) => c.id == chatId);
+        if (chatIndex != -1) {
+          final chat = _chats[chatIndex];
+          if ((chat.unreadCount[currentUserId] ?? 0) != 0) {
+            _chats[chatIndex] = chat.resetUnreadCount(currentUserId);
+            notifyListeners();
+          }
+        }
+      }
+      
       // Stop typing indicator when message is sent
       await stopTyping(chatId);
       
@@ -598,6 +611,19 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> markChatAsRead(String chatId) async {
     try {
+      // Optimistically reset unread count locally
+      final currentUserId = _chatService.currentUserId;
+      if (currentUserId != null) {
+        final chatIndex = _chats.indexWhere((c) => c.id == chatId);
+        if (chatIndex != -1) {
+          final chat = _chats[chatIndex];
+          if ((chat.unreadCount[currentUserId] ?? 0) != 0) {
+            _chats[chatIndex] = chat.resetUnreadCount(currentUserId);
+            notifyListeners();
+          }
+        }
+      }
+
       await _chatService.markChatAsRead(chatId);
       _clearError();
     } catch (e) {
@@ -646,6 +672,19 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> markMessagesAsRead(String chatId) async {
     try {
+      // Optimistically reset unread count locally for immediate UI feedback
+      final currentUserId = _chatService.currentUserId;
+      if (currentUserId != null) {
+        final chatIndex = _chats.indexWhere((c) => c.id == chatId);
+        if (chatIndex != -1) {
+          final chat = _chats[chatIndex];
+          if ((chat.unreadCount[currentUserId] ?? 0) != 0) {
+            _chats[chatIndex] = chat.resetUnreadCount(currentUserId);
+            notifyListeners();
+          }
+        }
+      }
+
       await _chatService.markMessagesAsRead(chatId);
     } catch (e) {
       // Silently fail - not critical

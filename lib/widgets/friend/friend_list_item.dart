@@ -9,11 +9,13 @@ import '../../utils/helpers.dart';
 class FriendListItem extends StatelessWidget {
   final UserModel user;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const FriendListItem({
     super.key,
     required this.user,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -23,77 +25,80 @@ class FriendListItem extends StatelessWidget {
         final theme = themeProvider.currentTheme;
         return Container(
           margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: onTap,
-            child: Container(
-              padding: const EdgeInsets.all(AppConstants.paddingMedium),
-              decoration: BoxDecoration(
-                color: theme.cardColor,
-                borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
-              ),
-              child: Row(
-                children: [
-                  // Profile Image with Online Status
-                  Stack(
-                    children: [
-                      _buildProfileImage(theme),
-                      if (user.isOnline)
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: theme.onlineColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: theme.cardColor,
-                                width: 2,
+          child: GestureDetector(
+            onLongPress: onLongPress,
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: onTap,
+              child: Container(
+                padding: const EdgeInsets.all(AppConstants.paddingMedium),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(AppConstants.borderRadiusMedium),
+                ),
+                child: Row(
+                  children: [
+                    // Profile Image with Online Status
+                    Stack(
+                      children: [
+                        _buildProfileImage(theme),
+                        if (user.isOnline)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: theme.onlineColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: theme.cardColor,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                  
-                  const SizedBox(width: AppConstants.paddingMedium),
-                  
-                  // User Info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.name,
-                          style: AppConstants.bodyLarge.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: theme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          user.isOnline 
-                            ? AppStrings.online 
-                            : 'Last seen ${AppHelpers.formatLastSeen(user.lastSeen)}',
-                          style: AppConstants.bodyMedium.copyWith(
-                            color: user.isOnline 
-                              ? theme.onlineColor 
-                              : theme.textSecondary,
-                          ),
-                        ),
                       ],
                     ),
-                  ),
-                  
-                  // Message Icon
-                  Icon(
-                    CupertinoIcons.chat_bubble,
-                    color: theme.primaryColor,
-                    size: 20,
-                  ),
-                ],
+                    
+                    const SizedBox(width: AppConstants.paddingMedium),
+                    
+                    // User Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.name,
+                            style: AppConstants.bodyLarge.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: theme.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            user.isOnline 
+                              ? AppStrings.online 
+                              : 'Last seen ${AppHelpers.formatLastSeen(user.lastSeen)}',
+                            style: AppConstants.bodyMedium.copyWith(
+                              color: user.isOnline 
+                                ? theme.onlineColor 
+                                : theme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Message Icon
+                    Icon(
+                      CupertinoIcons.chat_bubble,
+                      color: theme.primaryColor,
+                      size: 20,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -176,6 +176,26 @@ class FriendProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> unfriend(String otherUserId) async {
+    try {
+      _setLoading(true);
+      _clearError();
+      
+      final currentUserId = _authService.currentUser?.uid;
+      if (currentUserId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      await _firestoreService.deleteFriendship(currentUserId, otherUserId);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   bool isFriend(String userId) {
     final currentUserId = _authService.currentUser?.uid;
     if (currentUserId == null) return false;

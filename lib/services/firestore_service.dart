@@ -5,6 +5,7 @@ import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/friend_request_model.dart';
 import '../utils/constants.dart';
+import 'dart:async';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -168,22 +169,81 @@ class FirestoreService {
   }
 
   Stream<List<Friendship>> getFriends(String userId) {
-    return _firestore
+    // Merge real-time snapshots for friendships where the user is either user1Id or user2Id
+    final controller = StreamController<List<Friendship>>.broadcast();
+
+    List<Friendship> friendsAsUser1 = [];
+    List<Friendship> friendsAsUser2 = [];
+
+    StreamSubscription? sub1;
+    StreamSubscription? sub2;
+
+    void emitCombined() {
+      // Combine both lists and emit
+      controller.add([...friendsAsUser1, ...friendsAsUser2]);
+    }
+
+    sub1 = _firestore
         .collection(AppConstants.friendsCollection)
         .where('user1Id', isEqualTo: userId)
         .snapshots()
-        .asyncMap((snapshot1) async {
-      final friends1 = snapshot1.docs.map((doc) => Friendship.fromDocument(doc)).toList();
-      
-      final snapshot2 = await _firestore
-          .collection(AppConstants.friendsCollection)
-          .where('user2Id', isEqualTo: userId)
-          .get();
-      
-      final friends2 = snapshot2.docs.map((doc) => Friendship.fromDocument(doc)).toList();
-      
-      return [...friends1, ...friends2];
+        .listen((snapshot) {
+      friendsAsUser1 = snapshot.docs.map((doc) => Friendship.fromDocument(doc)).toList();
+      emitCombined();
+    }, onError: (error) {
+      controller.addError(error);
     });
+
+    sub2 = _firestore
+        .collection(AppConstants.friendsCollection)
+        .where('user2Id', isEqualTo: userId)
+        .snapshots()
+        .listen((snapshot) {
+      friendsAsUser2 = snapshot.docs.map((doc) => Friendship.fromDocument(doc)).toList();
+      emitCombined();
+    }, onError: (error) {
+      controller.addError(error);
+    });
+
+    controller.onCancel = () async {
+      await sub1?.cancel();
+      await sub2?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  // Remove friendship between two users (affects both perspectives)
+  Future<void> deleteFriendship(String userAId, String userBId) async {
+    try {
+      final col = _firestore.collection(AppConstants.friendsCollection);
+
+      // Find friendships where (user1==A && user2==B) OR (user1==B && user2==A)
+      final q1 = await col
+          .where('user1Id', isEqualTo: userAId)
+          .where('user2Id', isEqualTo: userBId)
+          .get();
+
+      final q2 = await col
+          .where('user1Id', isEqualTo: userBId)
+          .where('user2Id', isEqualTo: userAId)
+          .get();
+
+      final docs = [...q1.docs, ...q2.docs];
+
+      if (docs.isEmpty) {
+        // Nothing to delete; treat as success to keep UX smooth
+        return;
+      }
+
+      final batch = _firestore.batch();
+      for (final d in docs) {
+        batch.delete(d.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to remove friend: ${e.toString()}');
+    }
   }
 
   // Chat Operations
