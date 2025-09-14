@@ -9,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../services/typing_service.dart';
 import '../services/error_service.dart';
 import '../services/cache_service.dart';
+import '../services/notification_service.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatService _chatService = ChatService();
@@ -16,6 +17,7 @@ class ChatProvider extends ChangeNotifier {
   final TypingService _typingService = TypingService();
   final ErrorService _errorService = ErrorService();
   final CacheService _cacheService = CacheService();
+  final NotificationService _notificationService = NotificationService();
 
   List<Chat> _chats = [];
   final Map<String, List<Message>> _chatMessages = {};
@@ -365,6 +367,10 @@ class ChatProvider extends ChangeNotifier {
           
           _chatMessages[chatId] = allMessages;
           _cacheMessages(chatId, allMessages);
+          
+          // Send push notifications for new messages from other users
+          _handleNewMessageNotifications(chatId, newMessages);
+          
           notifyListeners();
         }
       },
@@ -1067,6 +1073,74 @@ class ChatProvider extends ChangeNotifier {
   // Helpers
   String? get currentUserId => _chatService.currentUserId;
   bool isAdmin(Chat chat) => currentUserId != null && chat.createdBy == currentUserId;
+
+  // Handle push notifications for new messages
+  Future<void> _handleNewMessageNotifications(String chatId, List<Message> newMessages) async {
+    try {
+      final currentUserId = _chatService.currentUserId;
+      if (currentUserId == null) return;
+
+      final chat = _chats.firstWhere((c) => c.id == chatId, orElse: () => Chat(
+        id: chatId,
+        participants: [],
+        createdAt: DateTime.now(),
+        lastMessage: null,
+        lastMessageTime: DateTime.now(),
+      ));
+
+      // Filter messages not sent by current user
+      final messagesFromOthers = newMessages.where((msg) => msg.senderId != currentUserId).toList();
+      
+      for (final message in messagesFromOthers) {
+        // Get sender info for notification
+        final sender = await _loadUserWithCacheInternal(message.senderId);
+        if (sender == null) continue;
+
+        String notificationTitle;
+        String notificationBody;
+
+        if (chat.isGroupChat) {
+          notificationTitle = chat.name ?? 'Group Chat';
+          notificationBody = '${sender.name}: ${_getMessagePreview(message)}';
+        } else {
+          notificationTitle = sender.name;
+          notificationBody = _getMessagePreview(message);
+        }
+
+        // Send notification to current user (this would typically be handled server-side)
+        // For now, we'll create a notification request that can be processed by a cloud function
+        await _notificationService.sendNotificationToUser(
+          recipientUserId: currentUserId,
+          title: notificationTitle,
+          body: notificationBody,
+          data: {
+            'chatId': chatId,
+            'messageId': message.id,
+            'senderId': message.senderId,
+            'type': 'new_message',
+          },
+        );
+      }
+    } catch (e) {
+      print('Error handling new message notifications: $e');
+    }
+  }
+
+  // Get message preview for notifications
+  String _getMessagePreview(Message message) {
+    switch (message.type) {
+      case MessageType.text:
+        return message.text.length > 50 
+            ? '${message.text.substring(0, 50)}...' 
+            : message.text;
+      case MessageType.image:
+        return '📷 Photo';
+      case MessageType.file:
+        return '📎 File';
+      default:
+        return 'New message';
+    }
+  }
 
   @override
   void dispose() {

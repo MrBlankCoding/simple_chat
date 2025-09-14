@@ -963,4 +963,74 @@ class FirestoreService {
       throw Exception('Failed to mark chat as read: ${e.toString()}');
     }
   }
+
+  // Update user's FCM token
+  Future<void> updateUserFCMToken(String userId, String fcmToken) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'fcmToken': fcmToken,
+        'lastTokenUpdate': Timestamp.now(),
+      });
+      
+      // Update cache if user exists
+      if (_userCache.containsKey(userId)) {
+        final user = _userCache[userId]!;
+        _userCache[userId] = user.copyWith(fcmToken: fcmToken);
+      }
+      
+      print('FCM token updated for user: $userId');
+    } catch (e) {
+      print('Error updating FCM token: $e');
+      rethrow;
+    }
+  }
+
+  // Create notification request (for server-side processing)
+  Future<void> createNotificationRequest(Map<String, dynamic> notificationData) async {
+    try {
+      await _firestore.collection('notification_requests').add({
+        ...notificationData,
+        'createdAt': Timestamp.now(),
+        'processed': false,
+      });
+      print('Notification request created');
+    } catch (e) {
+      print('Error creating notification request: $e');
+      rethrow;
+    }
+  }
+
+  // Get users by FCM tokens (for batch notifications)
+  Future<List<UserModel>> getUsersByFCMTokens(List<String> fcmTokens) async {
+    try {
+      if (fcmTokens.isEmpty) return [];
+      
+      // Firestore 'in' queries are limited to 10 items
+      final chunks = <List<String>>[];
+      for (int i = 0; i < fcmTokens.length; i += 10) {
+        chunks.add(fcmTokens.sublist(i, i + 10 > fcmTokens.length ? fcmTokens.length : i + 10));
+      }
+      
+      final List<UserModel> users = [];
+      for (final chunk in chunks) {
+        final querySnapshot = await _firestore
+            .collection('users')
+            .where('fcmToken', whereIn: chunk)
+            .get();
+        
+        for (final doc in querySnapshot.docs) {
+          try {
+            users.add(UserModel.fromDocument(doc));
+          } catch (e) {
+            print('Error parsing user document ${doc.id}: $e');
+          }
+        }
+      }
+      
+      return users;
+    } catch (e) {
+      print('Error getting users by FCM tokens: $e');
+      return [];
+    }
+  }
 }

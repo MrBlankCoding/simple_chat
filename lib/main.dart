@@ -45,8 +45,29 @@ void main() async {
   runApp(const SimpleChat());
 }
 
-class SimpleChat extends StatelessWidget {
+class SimpleChat extends StatefulWidget {
   const SimpleChat({super.key});
+
+  @override
+  State<SimpleChat> createState() => _SimpleChatState();
+}
+
+class _SimpleChatState extends State<SimpleChat> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _setupNotificationNavigation();
+  }
+
+  void _setupNotificationNavigation() {
+    // Set up navigation callback for notification taps
+    NotificationService().setNavigationCallback((chatId) {
+      // Navigate to chat screen when notification is tapped
+      _navigatorKey.currentState?.pushNamed('/chat', arguments: {'chatId': chatId});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +82,7 @@ class SimpleChat extends StatelessWidget {
       child: Consumer2<AuthProvider, ThemeProvider>(
         builder: (context, authProvider, themeProvider, child) {
           return CupertinoApp(
+            navigatorKey: _navigatorKey,
             title: AppConstants.appName,
             theme: themeProvider.currentTheme.cupertinoThemeData,
             home: _buildHome(authProvider),
