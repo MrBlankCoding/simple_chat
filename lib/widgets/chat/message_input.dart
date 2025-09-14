@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import '../../utils/constants.dart';
 
@@ -6,13 +7,19 @@ class MessageInput extends StatefulWidget {
   final VoidCallback onSendImage;
   final TextEditingController? controller;
   final bool isEditing;
+  final String chatId;
+  final Function(String)? onStartTyping;
+  final Function(String)? onStopTyping;
 
   const MessageInput({
     super.key,
     required this.onSendMessage,
     required this.onSendImage,
+    required this.chatId,
     this.controller,
     this.isEditing = false,
+    this.onStartTyping,
+    this.onStopTyping,
   });
 
   @override
@@ -22,6 +29,8 @@ class MessageInput extends StatefulWidget {
 class _MessageInputState extends State<MessageInput> {
   late TextEditingController _textController;
   bool _hasText = false;
+  bool _isTyping = false;
+  Timer? _typingTimer;
 
   @override
   void initState() {
@@ -44,11 +53,32 @@ class _MessageInputState extends State<MessageInput> {
     setState(() {
       _hasText = _textController.text.trim().isNotEmpty;
     });
+    if (_hasText && !_isTyping) {
+      _isTyping = true;
+      _typingTimer = Timer(const Duration(seconds: 3), () {
+        if (_isTyping) {
+          _isTyping = false;
+          widget.onStopTyping?.call(widget.chatId);
+        }
+      });
+      widget.onStartTyping?.call(widget.chatId);
+    } else if (!_hasText && _isTyping) {
+      _isTyping = false;
+      _typingTimer?.cancel();
+      widget.onStopTyping?.call(widget.chatId);
+    }
   }
 
   void _sendMessage() {
     final text = _textController.text.trim();
     if (text.isNotEmpty) {
+      // Stop typing when sending message
+      if (_isTyping) {
+        _isTyping = false;
+        _typingTimer?.cancel();
+        widget.onStopTyping?.call(widget.chatId);
+      }
+      
       widget.onSendMessage(text);
       if (!widget.isEditing) {
         _textController.clear();

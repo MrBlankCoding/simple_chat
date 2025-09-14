@@ -7,6 +7,7 @@ import '../../models/message_model.dart';
 import '../../models/chat_model.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/message_input.dart';
+import '../../widgets/chat/typing_indicator.dart';
 import '../../widgets/common/offline_banner.dart';
 import '../../services/connectivity_service.dart';
 import '../../utils/constants.dart';
@@ -45,6 +46,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _scrollController.addListener(_onScroll);
     // Initialize the chat immediately so the header has data before first build
     _initializeChat();
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    chatProvider.subscribeToTyping(widget.chatId);
   }
 
   @override
@@ -199,6 +202,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     child: _buildMessagesList(messages, currentUser.uid, chatProvider),
                   ),
                   
+                  // Typing indicator
+                  _buildTypingIndicator(chatProvider),
+                  
                   // Reply preview
                   if (_replyingToMessage != null) _buildReplyPreview(),
                   
@@ -208,10 +214,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   // Message Input
                   MessageInput(
                     controller: _messageController,
+                    chatId: widget.chatId,
                     onSendMessage: (text) => _editingMessage != null 
                       ? _saveEditedMessage(chatProvider, text)
                       : _sendMessage(chatProvider, text),
                     onSendImage: () => _sendImage(chatProvider),
+                    onStartTyping: (chatId) => chatProvider.startTyping(chatId),
+                    onStopTyping: (chatId) => chatProvider.stopTyping(chatId),
                     isEditing: _editingMessage != null,
                   ),
                 ],
@@ -526,6 +535,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       _replyingToMessage = null; // Clear reply if editing
       _messageController.text = message.text;
     });
+  }
+
+  Widget _buildTypingIndicator(ChatProvider chatProvider) {
+    final typingUserNames = chatProvider.getTypingUserNames(widget.chatId);
+    
+    if (typingUserNames.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return TypingIndicator(typingUserNames: typingUserNames);
   }
 
   Widget _buildReplyPreview() {

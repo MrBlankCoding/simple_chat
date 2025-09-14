@@ -841,6 +841,19 @@ class ChatProvider extends ChangeNotifier {
     return _users[userId];
   }
 
+  // Get typing users for a chat
+  List<String> getTypingUsers(String chatId) {
+    return _typingUsers[chatId] ?? [];
+  }
+
+  // Get typing user names for a chat
+  List<String> getTypingUserNames(String chatId) {
+    final typingUserIds = _typingUsers[chatId] ?? [];
+    return typingUserIds
+        .map((userId) => _users[userId]?.name ?? 'Unknown User')
+        .toList();
+  }
+
   // Preload users for better performance
   Future<void> preloadUsers(List<String> userIds) async {
     final futures = <Future>[];
